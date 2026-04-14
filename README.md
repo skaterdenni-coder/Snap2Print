@@ -4,8 +4,10 @@
 
 ## ✨ Hauptmerkmale
 
-- **Image-to-3D KI**: Verwandelt Fotos mithilfe der Meshy AI API in hochwertige 3D-Modelle (.glb).
-- **Multi-View Support**: Nutze bis zu 4 Perspektiven (45°, Links, Rechts, Hinten), um die Genauigkeit und Details deiner 3D-Modelle zu maximieren.
+- **Tripo AI Integration**: Nutzt die fortschrittliche **Tripo AI P1 (v2)** Engine für die 3D-Generierung.
+- **Multiview-to-Model Workflow**:
+    1. **Schritt 1 (Modellierung)**: Erstellt aus bis zu 4 Perspektiven (Vorne, Links, Rechts, Hinten) ein präzises 3D-Mesh.
+    2. **Schritt 2 (Automatisches Refine)**: Sobald das Basismodell fertig ist, startet die App automatisch die **PBR-Texturierung**, um ein fotorealistisches Ergebnis zu erzielen.
 - **AR Sharing Workflow**:
     1. Generiere dein Modell in der App.
     2. Lade es automatisch auf **Litterbox (catbox.moe)** hoch.
@@ -18,10 +20,10 @@
 ## 🛠 Technologien
 
 - **Framework**: Expo / React Native (TypeScript)
-- **KI-Integration**: Meshy AI Open API
+- **KI-Integration**: Tripo AI API (Multiview & Texture Refine)
 - **Hosting**: Litterbox API (für temporäres Modell-Hosting)
 - **AR-Viewer**: [Web-basierter AR-Viewer](https://skaterdenni-coder.github.io/AR-Viewer/)
-- **State Management**: TanStack Query (React Query) & Zustand
+- **State Management**: TanStack Query (React Query)
 - **Speicherung**: AsyncStorage für Historie und aktive Tasks
 
 ## 🚀 Installation & Start
@@ -32,10 +34,10 @@
    bun install
    ```
 2. **API-Key konfigurieren**:
-   Hinterlege deinen Meshy AI API-Key in den App-Einstellungen.
+   Hinterlege deinen **Tripo AI API-Key** in den App-Einstellungen.
 3. **App auf dem Emulator/Handy starten**:
    ```sh
-   npx expo run:android
+   npx expo start
    ```
 
 ## 📸 AR Viewer Integration

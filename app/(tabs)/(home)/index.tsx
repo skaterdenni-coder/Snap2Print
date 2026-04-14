@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Alert,
   Animated,
-  Linking,
   ActivityIndicator,
   Platform,
   Share,
@@ -16,13 +15,12 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ImagePlus, X, Sparkles, Box, ExternalLink, Clock, CheckCircle, AlertCircle, Loader, Share2 } from 'lucide-react-native';
+import { ImagePlus, X, Sparkles, Box, Clock, CheckCircle, AlertCircle, Loader, Share2 } from 'lucide-react-native';
 import { useMutation } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
-import { createImageTo3DTask, getTaskStatus, imageUriToBase64DataUrl, MeshyTask } from '@/utils/meshy';
+import { createTripoTask, getTripoTaskStatus, mapTripoStatus, createTripoRefineTask, imageUriToBase64DataUrl } from '@/utils/tripo';
 import { rainbowGradient } from '@/constants/colors';
-import { useRouter } from 'expo-router';
 import { useHistory } from '@/contexts/HistoryContext';
 
 interface SelectedImage {
@@ -34,15 +32,16 @@ interface SelectedImage {
 interface TaskEntry {
   id: string;
   taskId: string;
-  status: MeshyTask['status'];
+  status: 'PENDING' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED';
   progress: number;
   thumbnailUrl?: string;
-  modelUrls?: MeshyTask['model_urls'];
+  modelUrls?: { glb?: string };
   createdAt: string;
+  isRefining?: boolean;
 }
 
 const PLACEHOLDERS = [
-  { id: 'p1', label: '45°' },
+  { id: 'p1', label: 'Vorne' },
   { id: 'p2', label: 'Links' },
   { id: 'p3', label: 'Rechts' },
   { id: 'p4', label: 'Hinten' },
@@ -53,11 +52,8 @@ export default function HomeScreen() {
   const { apiKey, hasApiKey } = useSettings();
   const { addEntry, activeTasks, addActiveTask, updateTaskProgress } = useHistory();
   const insets = useSafeAreaInsets();
-  const router = useRouter();
 
-  // State für die 4 Bilder (initially empty)
   const [images, setImages] = useState<(SelectedImage | null)[]>([null, null, null, null]);
-
   const [tasks, setTasks] = useState<TaskEntry[]>([]);
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
   const pollIntervals = useRef<Record<string, ReturnType<typeof setInterval>>>({});
@@ -65,75 +61,109 @@ export default function HomeScreen() {
 
   const isRainbow = mode === 'rainbow';
 
-  const startPolling = useCallback((taskId: string) => {
+  const startPolling = useCallback((taskId: string, isRefineTask: boolean = false) => {
     if (pollIntervals.current[taskId]) return;
     if (!apiKey) return;
 
     const interval = setInterval(async () => {
       try {
-        const status = await getTaskStatus(apiKey, taskId);
-        setTasks((prev) => prev.map((t) => t.taskId === taskId ? { ...t, ...status } : t));
-        updateTaskProgress(taskId, status.progress);
+        const tripoData = await getTripoTaskStatus(apiKey, taskId);
+        const mappedStatus = mapTripoStatus(tripoData.status);
 
-        if (status.status === 'SUCCEEDED' || status.status === 'FAILED' || status.status === 'EXPIRED') {
+        setTasks((prev) => prev.map((t) => t.taskId === taskId ? {
+          ...t,
+          status: mappedStatus,
+          progress: tripoData.progress,
+          thumbnailUrl: tripoData.output?.rendered_image || t.thumbnailUrl,
+          modelUrls: tripoData.output?.pbr_model || tripoData.output?.model ? { glb: tripoData.output.pbr_model || tripoData.output.model } : t.modelUrls
+        } : t));
+
+        updateTaskProgress(taskId, tripoData.progress);
+
+        if (mappedStatus === 'SUCCEEDED') {
           clearInterval(interval);
           delete pollIntervals.current[taskId];
-          if (status.status === 'SUCCEEDED') {
+
+          if (!isRefineTask) {
+            console.log('[Tripo] Basis-Modell fertig. Starte Refine...');
+            try {
+              const refineTaskId = await createTripoRefineTask(apiKey, taskId);
+              setTasks(prev => prev.map(t => t.taskId === taskId ? {
+                ...t,
+                taskId: refineTaskId,
+                status: 'PENDING',
+                progress: 0,
+                isRefining: true
+              } : t));
+              startPolling(refineTaskId, true);
+            } catch (err) {
+              console.error('[Tripo] Refine Fehler:', err);
+              Alert.alert('Fehler', 'Refinement konnte nicht gestartet werden.');
+            }
+          } else {
             addEntry({
               id: `${Date.now()}`,
               taskId,
-              thumbnailUrl: status.thumbnail_url,
-              modelUrls: status.model_urls,
-              createdAt: status.created_at || new Date().toISOString(),
+              thumbnailUrl: tripoData.output?.rendered_image,
+              modelUrls: { glb: tripoData.output?.pbr_model || tripoData.output?.model },
+              createdAt: new Date().toISOString(),
               completedAt: new Date().toISOString(),
             });
             setTasks(prev => prev.filter(t => t.taskId !== taskId));
           }
-          if (Platform.OS !== 'web') {
-            Haptics.notificationAsync(status.status === 'SUCCEEDED' ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Error);
-          }
+
+          if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } else if (mappedStatus === 'FAILED' || mappedStatus === 'EXPIRED') {
+          clearInterval(interval);
+          delete pollIntervals.current[taskId];
+          if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
       } catch (error: any) {
-        if (error.message?.includes('401')) {
-           clearInterval(interval);
-           delete pollIntervals.current[taskId];
-        }
+        console.error('[Tripo] Poll Fehler:', error);
       }
-    }, 5000);
+    }, 4000);
     pollIntervals.current[taskId] = interval;
   }, [apiKey, addEntry, updateTaskProgress]);
 
   useEffect(() => {
     if (hasApiKey && apiKey && activeTasks.length > 0) {
-      const initialTasks: TaskEntry[] = activeTasks.map(at => ({
-        id: at.id, taskId: at.taskId, status: 'IN_PROGRESS', progress: at.progress, createdAt: at.createdAt,
-      }));
-      setTasks(prev => {
-        const existingIds = new Set(prev.map(t => t.taskId));
-        return [...prev, ...initialTasks.filter(t => !existingIds.has(t.taskId))];
-      });
       activeTasks.forEach(at => startPolling(at.taskId));
     }
   }, [hasApiKey, apiKey, activeTasks.length, startPolling]);
 
-  useEffect(() => () => Object.values(pollIntervals.current).forEach(clearInterval), []);
-
   const pickImage = useCallback(async (index: number) => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 0.8,
-    });
+    try {
+      // Nutze MediaTypeOptions (Legacy) oder direkt den String fuer maximale Kompatibilitaet
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 0.8,
+      });
 
-    if (!result.canceled && result.assets[0]) {
-      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const newImages = [...images];
-      newImages[index] = {
-        uri: result.assets[0].uri,
-        id: `${Date.now()}-${index}`,
-        label: PLACEHOLDERS[index].label,
-      };
-      setImages(newImages);
+      if (!result.canceled && result.assets[0]) {
+        if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        const newImages = [...images];
+        newImages[index] = {
+          uri: result.assets[0].uri,
+          id: `${Date.now()}-${index}`,
+          label: PLACEHOLDERS[index].label,
+        };
+        setImages(newImages);
+      }
+    } catch (error) {
+      console.error('ImagePicker Error:', error);
+      // Fallback auf die alte Methode falls die neue (Array) in deiner Version nicht klappt
+      const result = await ImagePicker.launchImageLibraryAsync({
+        // @ts-ignore
+        mediaTypes: ImagePicker.MediaTypeOptions?.Images || 'images',
+        allowsEditing: false,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const newImages = [...images];
+        newImages[index] = { uri: result.assets[0].uri, id: `${Date.now()}-${index}`, label: PLACEHOLDERS[index].label };
+        setImages(newImages);
+      }
     }
   }, [images]);
 
@@ -146,10 +176,12 @@ export default function HomeScreen() {
 
   const createTaskMutation = useMutation({
     mutationFn: async () => {
-      const filteredImages = images.filter((img): img is SelectedImage => img !== null);
-      if (filteredImages.length === 0) throw new Error('Bitte wähle mindestens ein Bild');
-      const imagesBase64 = await Promise.all(filteredImages.map(img => imageUriToBase64DataUrl(img.uri)));
-      return await createImageTo3DTask(apiKey, imagesBase64);
+      // Wir senden die URIs direkt, um den Upload-Prozess in tripo.ts zu optimieren
+      const imageUris = images.map(img => img?.uri || null);
+      const activeImages = imageUris.filter(i => i !== null);
+      if (activeImages.length < 2) throw new Error('Bitte wähle mindestens zwei Bilder aus.');
+
+      return await createTripoTask(apiKey, imageUris);
     },
     onSuccess: (taskId) => {
       const entry: TaskEntry = { id: `${Date.now()}`, taskId, status: 'PENDING', progress: 0, createdAt: new Date().toISOString() };
@@ -192,7 +224,7 @@ export default function HomeScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 100 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Snap2XR</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Erstelle 3D-Modelle aus deinen Bildern</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Powered by Tripo AI P1</Text>
         </View>
 
         <View style={styles.section}>
@@ -240,7 +272,12 @@ export default function HomeScreen() {
                 <View style={styles.taskHeader}>
                   {task.thumbnailUrl ? <Image source={{ uri: task.thumbnailUrl }} style={styles.taskThumbnail} contentFit="cover" /> : <View style={[styles.taskThumbnailPlaceholder, { backgroundColor: colors.inputBackground }]}><Box size={24} color={colors.textTertiary} /></View>}
                   <View style={styles.taskInfo}>
-                    <View style={styles.statusRow}>{getStatusIcon(task.status)}<Text style={[styles.statusText, { color: colors.text }]}>{getStatusText(task.status)}</Text></View>
+                    <View style={styles.statusRow}>
+                      {getStatusIcon(task.status)}
+                      <Text style={[styles.statusText, { color: colors.text }]}>
+                        {task.isRefining ? 'Texturierung...' : getStatusText(task.status)}
+                      </Text>
+                    </View>
                     {(task.status === 'PENDING' || task.status === 'IN_PROGRESS') && <View style={styles.progressBarContainer}><View style={[styles.progressBarBg, { backgroundColor: colors.inputBackground }]}><View style={[styles.progressBarFill, { width: `${task.progress}%`, backgroundColor: isRainbow ? getRainbowColor(idx + 5) : colors.accent }]} /></View><Text style={[styles.progressText, { color: colors.textSecondary }]}>{task.progress}%</Text></View>}
                   </View>
                 </View>

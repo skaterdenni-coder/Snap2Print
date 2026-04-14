@@ -2,7 +2,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
-const API_KEY_STORAGE = 'meshy_api_key';
+const API_KEY_STORAGE = 'tripo_api_key'; // Geändert von meshy_api_key
 
 export const [SettingsProvider, useSettings] = createContextHook(() => {
   const [apiKey, setApiKeyState] = useState<string>('');
