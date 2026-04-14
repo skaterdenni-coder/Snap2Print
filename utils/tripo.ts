@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 const TRIPO_BASE_URL = 'https://api.tripo3d.ai/v2/openapi';
 
 export interface TripoTask {
@@ -13,12 +15,10 @@ export interface TripoTask {
 }
 
 /**
- * Lädt eine Bilddatei über Multipart/Form-Data hoch, wie in der Tripo V2 Spec gefordert.
+ * Lädt eine Bilddatei über Multipart/Form-Data hoch.
  */
 async function uploadToTripo(apiKey: string, uri: string): Promise<string> {
   const formData = new FormData();
-
-  // Extrahiere Dateiname und Typ aus der URI oder nutze Defaults
   const filename = uri.split('/').pop() || 'image.jpg';
   const match = /\.(\w+)$/.exec(filename);
   const type = match ? `image/${match[1]}` : `image/jpeg`;
@@ -30,65 +30,40 @@ async function uploadToTripo(apiKey: string, uri: string): Promise<string> {
     type: type,
   });
 
-  console.log('[Tripo] Uploading:', filename);
-
   const response = await fetch(`${TRIPO_BASE_URL}/upload`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      // 'Content-Type' darf NICHT gesetzt werden bei FormData, fetch macht das automatisch inkl. boundary
-    },
+    headers: { 'Authorization': `Bearer ${apiKey}` },
     body: formData,
   });
 
   const data = await response.json();
-  if (!response.ok || data.code !== 0) {
-    console.error('[Tripo] Upload Fehler:', data);
-    throw new Error(`Upload fehlgeschlagen: ${data.message || 'Unbekannter Fehler'}`);
-  }
-
+  if (!response.ok || data.code !== 0) throw new Error(data.message);
   return data.data.image_token || data.data.file_token;
 }
-
-import { Platform } from 'react-native';
 
 export async function createTripoTask(
   apiKey: string,
   imageUris: (string | null)[]
 ): Promise<string> {
-  console.log('[Tripo] Starte Multiview Task (P1). Uploading images...');
+  console.log('[Tripo] Starte High-Quality Multiview Task...');
 
-  // 1. Alle verfügbaren Bilder hochladen
   const tokens = await Promise.all(imageUris.map(async (uri) => {
     if (!uri) return null;
     return await uploadToTripo(apiKey, uri);
   }));
 
-  // 2. Mapping auf Tripo-Reihenfolge: [Front, Left, Back, Right]
-  // UI Indices: 0:Vorne, 1:Links, 2:Rechts, 3:Hinten
-  const tripoOrder = [
-    tokens[0], // Front
-    tokens[1], // Left
-    tokens[3], // Back (UI Index 3)
-    tokens[2]  // Right (UI Index 2)
-  ];
-
-  // 3. Files Array aufbauen (exakt 4 Items)
-  const files = tripoOrder.map(token => {
-    if (!token) return {};
-    return {
-      type: 'jpg',
-      file_token: token
-    };
-  });
+  const tripoOrder = [tokens[0], tokens[1], tokens[3], tokens[2]];
+  const files = tripoOrder.map(token => token ? { type: 'jpg', file_token: token } : {});
 
   const body = {
     type: 'multiview_to_model',
     model_version: 'P1-20260311',
     files: files,
-    face_limit: 4000,
+    face_limit: 50000, // Erhöht auf 50k für mobile AR (guter Kompromiss)
     texture: true,
-    pbr: true
+    pbr: true,
+    texture_quality: 'detailed', // Höhere Texturauflösung
+    geometry_quality: 'detailed'  // Mehr Details in der Geometrie
   };
 
   const response = await fetch(`${TRIPO_BASE_URL}/task`, {
@@ -101,27 +76,17 @@ export async function createTripoTask(
   });
 
   const data = await response.json();
-
-  if (!response.ok || data.code !== 0) {
-    console.error('[Tripo] Task Fehler:', data);
-    throw new Error(`Tripo Fehler ${data.code}: ${data.message}`);
-  }
-
+  if (!response.ok || data.code !== 0) throw new Error(data.message);
   return data.data.task_id;
 }
 
-export async function createTripoRefineTask(
-  apiKey: string,
-  draftTaskId: string
-): Promise<string> {
-  console.log('[Tripo] Starte Texture Refinement...');
+export async function createTripoRefineTask(apiKey: string, draftTaskId: string): Promise<string> {
+  console.log('[Tripo] Starte High-End Refinement...');
 
-  // Laut P1 Doku wird für Refinement "texture_model" mit "original_model_task_id" genutzt
+  // Wir nutzen hier "refine_model" statt "texture_model" für maximale Geometrie-Qualität
   const body = {
-    type: 'texture_model',
-    original_model_task_id: draftTaskId,
-    texture: true,
-    pbr: true
+    type: 'refine_model',
+    draft_model_task_id: draftTaskId
   };
 
   const response = await fetch(`${TRIPO_BASE_URL}/task`, {
@@ -134,10 +99,7 @@ export async function createTripoRefineTask(
   });
 
   const data = await response.json();
-  if (!response.ok || data.code !== 0) {
-    throw new Error(`Refine Fehler: ${data.message}`);
-  }
-
+  if (!response.ok || data.code !== 0) throw new Error(data.message);
   return data.data.task_id;
 }
 
@@ -145,27 +107,12 @@ export async function getTripoTaskStatus(apiKey: string, taskId: string): Promis
   const response = await fetch(`${TRIPO_BASE_URL}/task/${taskId}`, {
     headers: { 'Authorization': `Bearer ${apiKey}` },
   });
-
   const data = await response.json();
-  if (!response.ok || data.code !== 0) {
-    throw new Error(`Status Fehler: ${data.message}`);
-  }
-
-  // Sicherstellen, dass task_id vorhanden ist
   return { ...data.data, task_id: data.data.task_id };
 }
 
 export function mapTripoStatus(tripoStatus: string): 'PENDING' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED' {
-  const map: Record<string, 'PENDING' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED'> = {
-    queued: 'PENDING',
-    running: 'IN_PROGRESS',
-    success: 'SUCCEEDED',
-    failed: 'FAILED',
-    cancelled: 'EXPIRED',
-    expired: 'EXPIRED',
-    banned: 'FAILED',
-    unknown: 'FAILED'
-  };
+  const map: any = { queued: 'PENDING', running: 'IN_PROGRESS', success: 'SUCCEEDED', failed: 'FAILED', cancelled: 'EXPIRED', expired: 'EXPIRED' };
   return map[tripoStatus] || 'FAILED';
 }
 
@@ -174,7 +121,7 @@ export async function imageUriToBase64DataUrl(uri: string): Promise<string> {
   const blob = await response.blob();
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onloadend = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Fehler'));
+    reader.onloadend = () => resolve(reader.result as string);
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
