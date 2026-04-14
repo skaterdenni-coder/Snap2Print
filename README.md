@@ -1,82 +1,47 @@
-# Welcome to your Scan2XR
+# Snap2XR AR Sharing 🚀
 
-2D‑to‑XR Vehicle Modeler
-Erstellt aus bis zu 4 Fotos automatisch ein 3D‑Modell und visualisiert es in Mixed Reality.  
-Die App nutzt die Meshy.ai‑API, um aus 2D‑Bildern hochwertige 3D‑Meshes zu generieren.
+**Snap2XR AR Sharing** ist eine leistungsstarke mobile Anwendung, mit der du aus einfachen 2D-Bildern beeindruckende 3D-Modelle erstellen und diese sofort in Augmented Reality (AR) teilen kannst.
 
-Features
-2D → 3D‑Konvertierung über die Meshy.ai‑API
-Bis zu 4 Eingabebilder (Front, Seite, Heck, Detail)
-Automatische Mesh‑Generierung (OBJ/GLB)
-Direkte XR‑Visualisierung (z. B. HoloLens, Meta Quest, Smartphone‑AR)
-API‑Key‑Konfiguration direkt in der App
-Fahrzeug‑optimierte Pipeline für realistische Modelle
+## ✨ Hauptmerkmale
 
-Funktionsweise
-Nutzer lädt 1–4 Bilder eines Fahrzeugs hoch.
-Die App sendet die Bilder an die Meshy.ai‑API.
-Meshy erzeugt ein 3D‑Modell (Mesh + Texturen).
-Das Modell wird in der App geladen und in XR dargestellt.
-Nutzer kann das Modell skalieren, drehen und im Raum platzieren.
+- **Image-to-3D KI**: Verwandelt Fotos mithilfe der Meshy AI API in hochwertige 3D-Modelle (.glb).
+- **Multi-View Support**: Nutze bis zu 4 Perspektiven (45°, Links, Rechts, Hinten), um die Genauigkeit und Details deiner 3D-Modelle zu maximieren.
+- **AR Sharing Workflow**:
+    1. Generiere dein Modell in der App.
+    2. Lade es automatisch auf **Litterbox (catbox.moe)** hoch.
+    3. Erhalte einen fertigen Link für den **Web AR-Viewer**.
+    4. Teile den Link, damit andere dein Modell sofort in AR betrachten können.
+- **Dauerhafte Aufgaben-Speicherung**: Schließe die App während der Generierung – der Fortschritt wird gespeichert und die App setzt die Arbeit beim nächsten Start automatisch fort.
+- **Historie**: Behalte den Überblick über alle deine erstellten Modelle und teile sie jederzeit erneut.
+- **Rainbow Theme**: Ein frisches, helles Design mit lebendigen Regenbogen-Farben für eine moderne Benutzererfahrung.
 
-Installation & Setup
-1. Repository klonen
-bash
-git clone https://github.com/<dein-user>/<dein-repo>.git
-cd <dein-repo>
-2. Abhängigkeiten installieren
-(Beispiel für Node.js – passe es an deine Tech‑Stack an)
-bash
-npm install
-3. Meshy.ai API‑Key eintragen
-In der App‑Einstellungsseite oder in einer .env Datei:
-env
-MESHY_API_KEY=dein_api_key_hier
-Den API‑Key erhältst du unter:
-https://dashboard.meshy.ai
+## 🛠 Technologien
 
-Nutzung
-1. App starten
-bash
-npm run start
-2. Bilder hochladen
-Mindestens 1 Bild
-Optimal 3–4 Bilder (Front, Seite, Heck)
-3. 3D‑Modell generieren
-Die App zeigt den Fortschritt der Meshy‑Generierung an.
-4. Modell in XR ansehen
-Modell wird automatisch geladen
-Platzierung im Raum
-Skalierung & Rotation
-Ideal für Fahrzeug‑Showcases, MR‑Präsentationen oder Engineering‑Visualisierung
+- **Framework**: Expo / React Native (TypeScript)
+- **KI-Integration**: Meshy AI Open API
+- **Hosting**: Litterbox API (für temporäres Modell-Hosting)
+- **AR-Viewer**: [Web-basierter AR-Viewer](https://skaterdenni-coder.github.io/AR-Viewer/)
+- **State Management**: TanStack Query (React Query) & Zustand
+- **Speicherung**: AsyncStorage für Historie und aktive Tasks
 
-Beispiel‑API‑Call (Meshy.ai)
-javascript
-const formData = new FormData();
-formData.append("image1", file1);
-formData.append("image2", file2);
-formData.append("image3", file3);
-formData.append("image4", file4);
-const response = await fetch("https://api.meshy.ai/v1/image-to-3d", {
-  method: "POST",
-  headers: {
-    "Authorization": `Bearer ${process.env.MESHY_API_KEY}`
-  },
-  body: formData
-});
-const result = await response.json();
-console.log(result.model_url);
+## 🚀 Installation & Start
 
-Output‑Formate
-Meshy.ai  liefert typischerweise:
-GLB (empfohlen für XR)
-OBJ + MTL + Texturen
-PBR‑Materialien
-Die App lädt automatisch das GLB‑Modell.
+1. **Abhängigkeiten installieren**:
+   ```sh
+   npm install
+   ```
+2. **API-Key konfigurieren**:
+   Hinterlege deinen Meshy AI API-Key in den App-Einstellungen.
+3. **App auf dem Emulator/Handy starten**:
+   ```sh
+   npx expo run:android
+   ```
 
-Tech‑Stack (Beispiel)
-Frontend: React / Unity / Flutter (je nach Projekt)
-Backend: Node.js / Python
-XR‑Framework: WebXR, Unity XR, ARCore/ARKit
-3D‑Engine: Three.js / Unity
+## 📸 AR Viewer Integration
 
+Die App ist nahtlos mit dem [AR Model Viewer](https://skaterdenni-coder.github.io/AR-Viewer/) verknüpft. Sobald ein Modell generiert und hochgeladen wurde, wird ein Link im Format:
+`https://skaterdenni-coder.github.io/AR-Viewer/?model=DEIN_LITTERBOX_LINK`
+erstellt, der direkt im Browser (Safari/Chrome) AR-Funktionen wie **Scene Viewer** (Android) und **Quick Look** (iOS) unterstützt.
+
+---
+Created by **Simba** | Snap2XR Project
