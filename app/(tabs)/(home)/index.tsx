@@ -50,7 +50,14 @@ const PLACEHOLDERS = [
 export default function HomeScreen() {
   const { colors, mode } = useTheme();
   const { apiKey, hasApiKey } = useSettings();
-  const { addEntry, activeTasks, addActiveTask, updateTaskProgress } = useHistory();
+  const {
+    addEntry,
+    activeTasks,
+    addActiveTask,
+    updateActiveTask,
+    removeActiveTask,
+    updateTaskProgress
+  } = useHistory();
   const insets = useSafeAreaInsets();
 
   const [images, setImages] = useState<(SelectedImage | null)[]>([null, null, null, null]);
@@ -61,7 +68,7 @@ export default function HomeScreen() {
 
   const isRainbow = mode === 'rainbow';
 
-  const startPolling = useCallback((taskId: string, isRefineTask: boolean = false) => {
+  const startPolling = useCallback((taskId: string, isRefining: boolean = false, baseTaskId?: string) => {
     if (pollIntervals.current[taskId]) return;
     if (!apiKey) return;
 
@@ -69,25 +76,45 @@ export default function HomeScreen() {
       try {
         const tripoData = await getTripoTaskStatus(apiKey, taskId);
         const mappedStatus = mapTripoStatus(tripoData.status);
+        const currentProgress = tripoData.progress;
+        const currentThumb = tripoData.output?.rendered_image;
+        const currentModel = tripoData.output?.pbr_model || tripoData.output?.model
+          ? { glb: tripoData.output.pbr_model || tripoData.output.model }
+          : undefined;
 
         setTasks((prev) => prev.map((t) => t.taskId === taskId ? {
           ...t,
           status: mappedStatus,
-          progress: tripoData.progress,
-          thumbnailUrl: tripoData.output?.rendered_image || t.thumbnailUrl,
-          modelUrls: tripoData.output?.pbr_model || tripoData.output?.model ? { glb: tripoData.output.pbr_model || tripoData.output.model } : t.modelUrls
+          progress: currentProgress,
+          thumbnailUrl: currentThumb || t.thumbnailUrl,
+          modelUrls: currentModel || t.modelUrls
         } : t));
 
-        updateTaskProgress(taskId, tripoData.progress);
+        // Persistenz-Update im HistoryContext
+        updateTaskProgress(taskId, currentProgress, {
+          status: mappedStatus,
+          thumbnailUrl: currentThumb,
+          modelUrls: currentModel
+        });
 
         if (mappedStatus === 'SUCCEEDED') {
           clearInterval(interval);
           delete pollIntervals.current[taskId];
 
-          if (!isRefineTask) {
-            console.log('[Tripo] Basis-Modell fertig. Starte Refine...');
+          if (!isRefining) {
+            console.log('[Tripo] Draft fertig. Starte Refine...');
             try {
               const refineTaskId = await createTripoRefineTask(apiKey, taskId);
+
+              // Kontext für Persistenz aktualisieren: ID tauschen
+              updateActiveTask(taskId, {
+                taskId: refineTaskId,
+                isRefining: true,
+                baseTaskId: taskId,
+                progress: 0,
+                status: 'PENDING'
+              });
+
               setTasks(prev => prev.map(t => t.taskId === taskId ? {
                 ...t,
                 taskId: refineTaskId,
@@ -95,20 +122,33 @@ export default function HomeScreen() {
                 progress: 0,
                 isRefining: true
               } : t));
-              startPolling(refineTaskId, true);
+
+              startPolling(refineTaskId, true, taskId);
             } catch (err) {
               console.error('[Tripo] Refine Fehler:', err);
-              Alert.alert('Fehler', 'Refinement konnte nicht gestartet werden.');
+              addEntry({
+                id: `${Date.now()}`,
+                taskId,
+                thumbnailUrl: currentThumb,
+                modelUrls: currentModel,
+                createdAt: new Date().toISOString(),
+                completedAt: new Date().toISOString(),
+              });
+              removeActiveTask(taskId);
+              setTasks(prev => prev.filter(t => t.taskId !== taskId));
             }
           } else {
+            // High-End Modell fertig
             addEntry({
               id: `${Date.now()}`,
               taskId,
-              thumbnailUrl: tripoData.output?.rendered_image,
-              modelUrls: { glb: tripoData.output?.pbr_model || tripoData.output?.model },
+              baseTaskId: baseTaskId,
+              thumbnailUrl: currentThumb,
+              modelUrls: currentModel,
               createdAt: new Date().toISOString(),
               completedAt: new Date().toISOString(),
             });
+            removeActiveTask(taskId);
             setTasks(prev => prev.filter(t => t.taskId !== taskId));
           }
 
@@ -116,6 +156,8 @@ export default function HomeScreen() {
         } else if (mappedStatus === 'FAILED' || mappedStatus === 'EXPIRED') {
           clearInterval(interval);
           delete pollIntervals.current[taskId];
+          removeActiveTask(taskId);
+          setTasks(prev => prev.filter(t => t.taskId !== taskId));
           if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
       } catch (error: any) {
@@ -123,17 +165,38 @@ export default function HomeScreen() {
       }
     }, 4000);
     pollIntervals.current[taskId] = interval;
-  }, [apiKey, addEntry, updateTaskProgress]);
+  }, [apiKey, addEntry, updateTaskProgress, updateActiveTask, removeActiveTask]);
 
+  // Effekt zur Wiederherstellung laufender Aufgaben beim App-Start
   useEffect(() => {
     if (hasApiKey && apiKey && activeTasks.length > 0) {
-      activeTasks.forEach(at => startPolling(at.taskId));
+      setTasks(prev => {
+        const existingIds = new Set(prev.map(t => t.taskId));
+        const resumedTasks: TaskEntry[] = activeTasks
+          .filter(at => !existingIds.has(at.taskId))
+          .map(at => ({
+            id: at.id,
+            taskId: at.taskId,
+            status: at.status || 'IN_PROGRESS',
+            progress: at.progress || 0,
+            createdAt: at.createdAt,
+            isRefining: at.isRefining,
+            thumbnailUrl: at.thumbnailUrl,
+            modelUrls: at.modelUrls
+          }));
+        return [...prev, ...resumedTasks];
+      });
+
+      activeTasks.forEach(at => {
+        startPolling(at.taskId, at.isRefining, at.baseTaskId);
+      });
     }
-  }, [hasApiKey, apiKey, activeTasks.length, startPolling]);
+  }, [hasApiKey, apiKey, activeTasks, startPolling]);
+
+  useEffect(() => () => Object.values(pollIntervals.current).forEach(clearInterval), []);
 
   const pickImage = useCallback(async (index: number) => {
     try {
-      // Nutze MediaTypeOptions (Legacy) oder direkt den String fuer maximale Kompatibilitaet
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: false,
@@ -152,18 +215,6 @@ export default function HomeScreen() {
       }
     } catch (error) {
       console.error('ImagePicker Error:', error);
-      // Fallback auf die alte Methode falls die neue (Array) in deiner Version nicht klappt
-      const result = await ImagePicker.launchImageLibraryAsync({
-        // @ts-ignore
-        mediaTypes: ImagePicker.MediaTypeOptions?.Images || 'images',
-        allowsEditing: false,
-        quality: 0.8,
-      });
-      if (!result.canceled && result.assets[0]) {
-        const newImages = [...images];
-        newImages[index] = { uri: result.assets[0].uri, id: `${Date.now()}-${index}`, label: PLACEHOLDERS[index].label };
-        setImages(newImages);
-      }
     }
   }, [images]);
 
@@ -176,16 +227,28 @@ export default function HomeScreen() {
 
   const createTaskMutation = useMutation({
     mutationFn: async () => {
-      // Wir senden die URIs direkt, um den Upload-Prozess in tripo.ts zu optimieren
       const imageUris = images.map(img => img?.uri || null);
-      const activeImages = imageUris.filter(i => i !== null);
-      if (activeImages.length < 2) throw new Error('Bitte wähle mindestens zwei Bilder aus.');
-
+      if (imageUris.filter(u => u !== null).length < 2) throw new Error('Mindestens 2 Bilder nötig.');
       return await createTripoTask(apiKey, imageUris);
     },
     onSuccess: (taskId) => {
-      const entry: TaskEntry = { id: `${Date.now()}`, taskId, status: 'PENDING', progress: 0, createdAt: new Date().toISOString() };
-      addActiveTask({ id: entry.id, taskId: entry.taskId, createdAt: entry.createdAt, progress: 0 });
+      const entry: TaskEntry = {
+        id: `${Date.now()}`,
+        taskId,
+        status: 'PENDING',
+        progress: 0,
+        createdAt: new Date().toISOString()
+      };
+
+      // In permanenten Speicher schreiben
+      addActiveTask({
+        id: entry.id,
+        taskId: entry.taskId,
+        createdAt: entry.createdAt,
+        progress: 0,
+        status: 'PENDING'
+      });
+
       setTasks((prev) => [entry, ...prev]);
       setImages([null, null, null, null]);
       startPolling(taskId);
@@ -224,7 +287,7 @@ export default function HomeScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 100 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Snap2XR</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Powered by Tripo AI P1</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Powered by Tripo AI V3.1</Text>
         </View>
 
         <View style={styles.section}>
@@ -275,7 +338,7 @@ export default function HomeScreen() {
                     <View style={styles.statusRow}>
                       {getStatusIcon(task.status)}
                       <Text style={[styles.statusText, { color: colors.text }]}>
-                        {task.isRefining ? 'Texturierung...' : getStatusText(task.status)}
+                        {task.isRefining ? 'Textur-Optimierung...' : getStatusText(task.status)}
                       </Text>
                     </View>
                     {(task.status === 'PENDING' || task.status === 'IN_PROGRESS') && <View style={styles.progressBarContainer}><View style={[styles.progressBarBg, { backgroundColor: colors.inputBackground }]}><View style={[styles.progressBarFill, { width: `${task.progress}%`, backgroundColor: isRainbow ? getRainbowColor(idx + 5) : colors.accent }]} /></View><Text style={[styles.progressText, { color: colors.textSecondary }]}>{task.progress}%</Text></View>}

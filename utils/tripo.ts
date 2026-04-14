@@ -14,23 +14,15 @@ export interface TripoTask {
   };
 }
 
-/**
- * Hilfsfunktion zum sicheren Parsen von JSON-Antworten
- */
 async function safeParseJson(response: Response) {
   const contentType = response.headers.get('content-type');
   if (!contentType || !contentType.includes('application/json')) {
     const text = await response.text();
-    console.error('[Tripo] Server antwortete mit HTML statt JSON. Status:', response.status);
-    console.error('[Tripo] Antwort-Vorschau:', text.substring(0, 200));
     throw new Error(`API Fehler (${response.status}): Server antwortete nicht im JSON-Format.`);
   }
   return await response.json();
 }
 
-/**
- * Lädt eine Bilddatei über Multipart/Form-Data hoch.
- */
 async function uploadToTripo(apiKey: string, uri: string): Promise<string> {
   const formData = new FormData();
   const filename = uri.split('/').pop() || 'image.jpg';
@@ -59,7 +51,7 @@ export async function createTripoTask(
   apiKey: string,
   imageUris: (string | null)[]
 ): Promise<string> {
-  console.log('[Tripo] Starte Multiview Task (V3.1)...');
+  console.log('[Tripo] Starte Multiview Task (V3.1) - Fokus: Texturschärfe (Web-Parität)');
 
   const tokens = await Promise.all(imageUris.map(async (uri) => {
     if (!uri) return null;
@@ -73,13 +65,15 @@ export async function createTripoTask(
     type: 'multiview_to_model',
     model_version: 'v3.1-20260211',
     files: files,
-    face_limit: 2000000,
+    face_limit: 2000000, // 1 Mio Faces für schärfere Geometrie-Kanten (hilft dem Text)
     texture: true,
     pbr: true,
     texture_quality: 'detailed',
     geometry_quality: 'detailed',
     texture_alignment: 'original_image',
-    orientation: 'align_image'
+    orientation: 'align_image',
+    // DEAKTIVIERT: Sorgte für Unschärfe bei realen Fotos
+    orthographic_projection: false
   };
 
   const response = await fetch(`${TRIPO_BASE_URL}/task`, {
@@ -97,12 +91,15 @@ export async function createTripoTask(
 }
 
 export async function createTripoRefineTask(apiKey: string, draftTaskId: string): Promise<string> {
+  // Texture Model Task zur finalen Schärfung
   const body = {
     type: 'texture_model',
     original_model_task_id: draftTaskId,
     texture: true,
     pbr: true,
-    texture_quality: 'detailed'
+    texture_quality: 'detailed',
+    texture_alignment: 'original_image',
+    bake: true // NEU: Erzwingt das Einbrennen der Textur in maximaler Qualität
   };
 
   const response = await fetch(`${TRIPO_BASE_URL}/task`, {
@@ -120,29 +117,15 @@ export async function createTripoRefineTask(apiKey: string, draftTaskId: string)
 }
 
 export async function getTripoTaskStatus(apiKey: string, taskId: string): Promise<TripoTask> {
-  if (!taskId) throw new Error('Task ID ist ungültig');
-
   const response = await fetch(`${TRIPO_BASE_URL}/task/${taskId}`, {
     headers: { 'Authorization': `Bearer ${apiKey.trim()}` },
   });
-
   const data = await safeParseJson(response);
-  if (data.code !== 0) throw new Error(data.message);
-
   return { ...data.data, task_id: data.data.task_id };
 }
 
-export function mapTripoStatus(tripoStatus: string): 'PENDING' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED' {
-  const map: Record<string, 'PENDING' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED'> = {
-    queued: 'PENDING',
-    running: 'IN_PROGRESS',
-    success: 'SUCCEEDED',
-    failed: 'FAILED',
-    cancelled: 'EXPIRED',
-    expired: 'EXPIRED',
-    banned: 'FAILED',
-    unknown: 'FAILED'
-  };
+export function mapTripoStatus(tripoStatus: string): any {
+  const map: any = { queued: 'PENDING', running: 'IN_PROGRESS', success: 'SUCCEEDED', failed: 'FAILED', cancelled: 'EXPIRED', expired: 'EXPIRED' };
   return map[tripoStatus] || 'FAILED';
 }
 
