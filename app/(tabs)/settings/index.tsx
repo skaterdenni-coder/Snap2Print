@@ -78,10 +78,8 @@ export default function SettingsScreen() {
               <Key size={18} color={colors.accent} />
             </View>
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Meshy.ai API-Key</Text>
-              <Text style={[styles.sectionDescription, { color: colors.textTertiary }]}>
-                Erhalte deinen Key auf meshy.ai
-              </Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Tripo API-Key</Text>
+
             </View>
           </View>
 

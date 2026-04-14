@@ -15,6 +15,20 @@ export interface TripoTask {
 }
 
 /**
+ * Hilfsfunktion zum sicheren Parsen von JSON-Antworten
+ */
+async function safeParseJson(response: Response) {
+  const contentType = response.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await response.text();
+    console.error('[Tripo] Server antwortete mit HTML statt JSON. Status:', response.status);
+    console.error('[Tripo] Antwort-Vorschau:', text.substring(0, 200));
+    throw new Error(`API Fehler (${response.status}): Server antwortete nicht im JSON-Format.`);
+  }
+  return await response.json();
+}
+
+/**
  * Lädt eine Bilddatei über Multipart/Form-Data hoch.
  */
 async function uploadToTripo(apiKey: string, uri: string): Promise<string> {
@@ -32,12 +46,12 @@ async function uploadToTripo(apiKey: string, uri: string): Promise<string> {
 
   const response = await fetch(`${TRIPO_BASE_URL}/upload`, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${apiKey}` },
+    headers: { 'Authorization': `Bearer ${apiKey.trim()}` },
     body: formData,
   });
 
-  const data = await response.json();
-  if (!response.ok || data.code !== 0) throw new Error(data.message);
+  const data = await safeParseJson(response);
+  if (data.code !== 0) throw new Error(data.message);
   return data.data.image_token || data.data.file_token;
 }
 
@@ -45,7 +59,7 @@ export async function createTripoTask(
   apiKey: string,
   imageUris: (string | null)[]
 ): Promise<string> {
-  console.log('[Tripo] Starte High-Quality Multiview Task...');
+  console.log('[Tripo] Starte Multiview Task (V3.1)...');
 
   const tokens = await Promise.all(imageUris.map(async (uri) => {
     if (!uri) return null;
@@ -57,62 +71,78 @@ export async function createTripoTask(
 
   const body = {
     type: 'multiview_to_model',
-    model_version: 'P1-20260311',
+    model_version: 'v3.1-20260211',
     files: files,
-    face_limit: 50000, // Erhöht auf 50k für mobile AR (guter Kompromiss)
+    face_limit: 2000000,
     texture: true,
     pbr: true,
-    texture_quality: 'detailed', // Höhere Texturauflösung
-    geometry_quality: 'detailed'  // Mehr Details in der Geometrie
+    texture_quality: 'detailed',
+    geometry_quality: 'detailed',
+    texture_alignment: 'original_image',
+    orientation: 'align_image'
   };
 
   const response = await fetch(`${TRIPO_BASE_URL}/task`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${apiKey.trim()}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
   });
 
-  const data = await response.json();
-  if (!response.ok || data.code !== 0) throw new Error(data.message);
+  const data = await safeParseJson(response);
+  if (data.code !== 0) throw new Error(data.message);
   return data.data.task_id;
 }
 
 export async function createTripoRefineTask(apiKey: string, draftTaskId: string): Promise<string> {
-  console.log('[Tripo] Starte High-End Refinement...');
-
-  // Wir nutzen hier "refine_model" statt "texture_model" für maximale Geometrie-Qualität
   const body = {
-    type: 'refine_model',
-    draft_model_task_id: draftTaskId
+    type: 'texture_model',
+    original_model_task_id: draftTaskId,
+    texture: true,
+    pbr: true,
+    texture_quality: 'detailed'
   };
 
   const response = await fetch(`${TRIPO_BASE_URL}/task`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${apiKey.trim()}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
   });
 
-  const data = await response.json();
-  if (!response.ok || data.code !== 0) throw new Error(data.message);
+  const data = await safeParseJson(response);
+  if (data.code !== 0) throw new Error(data.message);
   return data.data.task_id;
 }
 
 export async function getTripoTaskStatus(apiKey: string, taskId: string): Promise<TripoTask> {
+  if (!taskId) throw new Error('Task ID ist ungültig');
+
   const response = await fetch(`${TRIPO_BASE_URL}/task/${taskId}`, {
-    headers: { 'Authorization': `Bearer ${apiKey}` },
+    headers: { 'Authorization': `Bearer ${apiKey.trim()}` },
   });
-  const data = await response.json();
+
+  const data = await safeParseJson(response);
+  if (data.code !== 0) throw new Error(data.message);
+
   return { ...data.data, task_id: data.data.task_id };
 }
 
 export function mapTripoStatus(tripoStatus: string): 'PENDING' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED' {
-  const map: any = { queued: 'PENDING', running: 'IN_PROGRESS', success: 'SUCCEEDED', failed: 'FAILED', cancelled: 'EXPIRED', expired: 'EXPIRED' };
+  const map: Record<string, 'PENDING' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED'> = {
+    queued: 'PENDING',
+    running: 'IN_PROGRESS',
+    success: 'SUCCEEDED',
+    failed: 'FAILED',
+    cancelled: 'EXPIRED',
+    expired: 'EXPIRED',
+    banned: 'FAILED',
+    unknown: 'FAILED'
+  };
   return map[tripoStatus] || 'FAILED';
 }
 
