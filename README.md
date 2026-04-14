@@ -29,6 +29,7 @@
 1. **Abhängigkeiten installieren**:
    ```sh
    npm install
+   bun install
    ```
 2. **API-Key konfigurieren**:
    Hinterlege deinen Meshy AI API-Key in den App-Einstellungen.
