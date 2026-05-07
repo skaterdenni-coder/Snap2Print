@@ -15,7 +15,7 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { Box, ExternalLink, Trash2, XCircle, Clock, Share2 } from 'lucide-react-native';
+import { Box, ExternalLink, Trash2, XCircle, Clock, Share2, AlertTriangle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useHistory, HistoryEntry } from '@/contexts/HistoryContext';
 import { rainbowGradient } from '@/constants/colors';
@@ -26,6 +26,21 @@ export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
   const isRainbow = mode === 'rainbow';
+
+  const getExpirationStatus = (completedAt: string) => {
+    const start = new Date(completedAt).getTime();
+    const now = new Date().getTime();
+    const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+    const expiryTime = start + fourteenDaysMs;
+    const diff = expiryTime - now;
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+    if (diff <= 0) return { label: 'Abgelaufen', color: colors.danger, urgent: true };
+    if (days < 3) return { label: `${days}t ${hours}h übrig`, color: '#FF9F43', urgent: true };
+    return { label: `${days} Tage übrig`, color: colors.textTertiary, urgent: false };
+  };
 
   const handleClearAll = useCallback(() => {
     if (entries.length === 0) return;
@@ -107,13 +122,16 @@ export default function HistoryScreen() {
       ? Object.values(item.modelUrls).filter(Boolean).length
       : 0;
 
+    const expiry = getExpirationStatus(item.completedAt);
+
     return (
       <View
         style={[
           styles.card,
           {
             backgroundColor: colors.card,
-            borderColor: colors.cardBorder,
+            borderColor: expiry.urgent ? expiry.color : colors.cardBorder,
+            borderWidth: expiry.urgent ? 1.5 : 1,
           },
         ]}
       >
@@ -145,9 +163,13 @@ export default function HistoryScreen() {
                 })}
               </Text>
             </View>
-            <Text style={[styles.formatInfo, { color: colors.textSecondary }]}>
-              {formatCount} {formatCount === 1 ? 'Format' : 'Formate'} verfügbar
-            </Text>
+
+            <View style={styles.expiryRow}>
+              {expiry.urgent ? <AlertTriangle size={12} color={expiry.color} /> : <Clock size={12} color={expiry.color} />}
+              <Text style={[styles.expiryText, { color: expiry.color, fontWeight: expiry.urgent ? '700' : '500' }]}>
+                {expiry.label}
+              </Text>
+            </View>
           </View>
           <TouchableOpacity
             style={[styles.deleteButton, { backgroundColor: colors.danger + '12' }]}
@@ -364,6 +386,15 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   dateText: {
+    fontSize: 12,
+  },
+  expiryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 2,
+  },
+  expiryText: {
     fontSize: 12,
   },
   formatInfo: {
