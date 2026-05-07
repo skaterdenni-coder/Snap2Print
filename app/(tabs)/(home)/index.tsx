@@ -41,7 +41,7 @@ interface TaskEntry {
 }
 
 const PLACEHOLDERS = [
-  { id: 'p1', label: 'Vorne' },
+  { id: 'p1', label: '45° Vorne' },
   { id: 'p2', label: 'Links' },
   { id: 'p3', label: 'Rechts' },
   { id: 'p4', label: 'Hinten' },
@@ -323,7 +323,7 @@ export default function HomeScreen() {
             onPress={handleCreate}
             disabled={images.every(img => img === null) || !hasApiKey || createTaskMutation.isPending}
           >
-            {createTaskMutation.isPending ? <ActivityIndicator color="#FFF" size="small" /> : <><Sparkles size={20} color="#FFF" /><Text style={styles.createButtonText}>3D-Modell erstellen</Text></>}
+            {createTaskMutation.isPending ? <ActivityIndicator color="#FFF" size="small" /> : <><Text style={styles.createButtonText}>3D-Modell erstellen 1</Text></>}
           </TouchableOpacity>
         </Animated.View>
 
