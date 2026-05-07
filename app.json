@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Snap2XR AR Sharing",
-    "slug": "snap2xr-ar-sharing",
+    "name": "Snap2XR Real",
+    "slug": "snap2xr-Real",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -15,14 +15,14 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.rork.snap2xr-ar-sharing"
+      "bundleIdentifier": "app.snap2xr-ar-sharing"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.snap2xr_ar_sharing"
+      "package": "app.snap2xr_ar_sharing"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"

@@ -204,7 +204,7 @@ export default function SettingsScreen() {
         </View>
 
         <Text style={[styles.footerText, { color: colors.textTertiary }]}>
-          Powered by Meshy.ai • 3D Creator v1.0
+          Powered by Tripo.Ai• App Bachelor 2026
         </Text>
       </ScrollView>
     </View>
