@@ -32,6 +32,7 @@ interface SelectedImage {
 interface TaskEntry {
   id: string;
   taskId: string;
+  tokens?: string[]; // Speichert die Tokens für scharfes Refinement
   status: 'PENDING' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED';
   progress: number;
   thumbnailUrl?: string;
@@ -68,6 +69,12 @@ export default function HomeScreen() {
 
   const isRainbow = mode === 'rainbow';
 
+  // Hilfs-Ref, um in den Intervallen auf die aktuellsten Task-Daten zuzugreifen
+  const tasksRef = useRef<TaskEntry[]>([]);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
   const startPolling = useCallback((taskId: string, isRefining: boolean = false, baseTaskId?: string) => {
     if (pollIntervals.current[taskId]) return;
     if (!apiKey) return;
@@ -75,6 +82,8 @@ export default function HomeScreen() {
     const interval = setInterval(async () => {
       try {
         const tripoData = await getTripoTaskStatus(apiKey, taskId);
+        if (!tripoData) return;
+
         const mappedStatus = mapTripoStatus(tripoData.status);
         const currentProgress = tripoData.progress;
         const currentThumb = tripoData.output?.rendered_image;
@@ -90,7 +99,6 @@ export default function HomeScreen() {
           modelUrls: currentModel || t.modelUrls
         } : t));
 
-        // Persistenz-Update im HistoryContext
         updateTaskProgress(taskId, currentProgress, {
           status: mappedStatus,
           thumbnailUrl: currentThumb,
@@ -102,11 +110,14 @@ export default function HomeScreen() {
           delete pollIntervals.current[taskId];
 
           if (!isRefining) {
-            console.log('[Tripo] Draft fertig. Starte Refine...');
+            console.log('[Tripo] Draft fertig. Starte Refine mit Bild-Tokens...');
             try {
-              const refineTaskId = await createTripoRefineTask(apiKey, taskId);
+              // Tokens für diesen Task finden
+              const currentTask = tasksRef.current.find(t => t.taskId === taskId);
+              const tokens = currentTask?.tokens || [];
 
-              // Kontext für Persistenz aktualisieren: ID tauschen
+              const refineTaskId = await createTripoRefineTask(apiKey, taskId, tokens);
+
               updateActiveTask(taskId, {
                 taskId: refineTaskId,
                 isRefining: true,
@@ -138,7 +149,6 @@ export default function HomeScreen() {
               setTasks(prev => prev.filter(t => t.taskId !== taskId));
             }
           } else {
-            // High-End Modell fertig
             addEntry({
               id: `${Date.now()}`,
               taskId,
@@ -167,7 +177,6 @@ export default function HomeScreen() {
     pollIntervals.current[taskId] = interval;
   }, [apiKey, addEntry, updateTaskProgress, updateActiveTask, removeActiveTask]);
 
-  // Effekt zur Wiederherstellung laufender Aufgaben beim App-Start
   useEffect(() => {
     if (hasApiKey && apiKey && activeTasks.length > 0) {
       setTasks(prev => {
@@ -231,16 +240,16 @@ export default function HomeScreen() {
       if (imageUris.filter(u => u !== null).length < 2) throw new Error('Mindestens 2 Bilder nötig.');
       return await createTripoTask(apiKey, imageUris);
     },
-    onSuccess: (taskId) => {
+    onSuccess: ({ taskId, tokens }) => {
       const entry: TaskEntry = {
         id: `${Date.now()}`,
         taskId,
+        tokens,
         status: 'PENDING',
         progress: 0,
         createdAt: new Date().toISOString()
       };
 
-      // In permanenten Speicher schreiben
       addActiveTask({
         id: entry.id,
         taskId: entry.taskId,
@@ -323,7 +332,7 @@ export default function HomeScreen() {
             onPress={handleCreate}
             disabled={images.every(img => img === null) || !hasApiKey || createTaskMutation.isPending}
           >
-            {createTaskMutation.isPending ? <ActivityIndicator color="#FFF" size="small" /> : <><Text style={styles.createButtonText}>3D-Modell erstellen 1</Text></>}
+            {createTaskMutation.isPending ? <ActivityIndicator color="#FFF" size="small" /> : <><Text style={styles.createButtonText}>3D-Modell erstellen</Text></>}
           </TouchableOpacity>
         </Animated.View>
 
