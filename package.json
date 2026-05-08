@@ -1,11 +1,14 @@
 {
   "name": "expo-app",
+  "homepage": "https://skaterdenni-coder.github.io/Realisierung-BA/",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
     "start": "bunx rork start -p 94j1o5xvjo1x5w33adatz --tunnel",
     "start-web": "bunx rork start -p 94j1o5xvjo1x5w33adatz --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p 94j1o5xvjo1x5w33adatz --web --tunnel",
+    "predeploy": "bunx expo export -p web",
+    "deploy": "gh-pages -d dist",
     "lint": "expo lint",
     "android": "expo run:android",
     "ios": "expo run:ios"
@@ -54,6 +57,7 @@
     "@types/react": "~19.1.10",
     "eslint": "^9.31.0",
     "eslint-config-expo": "~10.0.0",
+    "gh-pages": "^6.3.0",
     "typescript": "~5.9.2"
   },
   "overrides": {

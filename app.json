@@ -25,7 +25,11 @@
       "package": "app.snap2xr_ar_sharing"
     },
     "web": {
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "bundler": "metro",
+      "output": "static",
+      "homepage": "https://skaterdenni-coder.github.io/Realisierung-BA/",
+      "baseUrl": "/Realisierung-BA"
     },
     "plugins": [
       [
