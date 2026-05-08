@@ -202,7 +202,7 @@ export default function SettingsScreen() {
         </View>
 
         <Text style={[styles.footerText, { color: colors.textTertiary }]}>
-          Powered by Tripo.Ai V3.1.3• App Bachelor 2026
+          Powered by Tripo.Ai V3.1• App Bachelor 2026
         </Text>
       </ScrollView>
     </View>
