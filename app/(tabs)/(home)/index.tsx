@@ -109,58 +109,18 @@ export default function HomeScreen() {
           clearInterval(interval);
           delete pollIntervals.current[taskId];
 
-          if (!isRefining) {
-            console.log('[Tripo] Draft fertig. Starte Refine mit Bild-Tokens...');
-            try {
-              // Tokens für diesen Task finden
-              const currentTask = tasksRef.current.find(t => t.taskId === taskId);
-              const tokens = currentTask?.tokens || [];
-
-              const refineTaskId = await createTripoRefineTask(apiKey, taskId, tokens);
-
-              updateActiveTask(taskId, {
-                taskId: refineTaskId,
-                isRefining: true,
-                baseTaskId: taskId,
-                progress: 0,
-                status: 'PENDING'
-              });
-
-              setTasks(prev => prev.map(t => t.taskId === taskId ? {
-                ...t,
-                taskId: refineTaskId,
-                status: 'PENDING',
-                progress: 0,
-                isRefining: true
-              } : t));
-
-              startPolling(refineTaskId, true, taskId);
-            } catch (err) {
-              console.error('[Tripo] Refine Fehler:', err);
-              addEntry({
-                id: `${Date.now()}`,
-                taskId,
-                thumbnailUrl: currentThumb,
-                modelUrls: currentModel,
-                createdAt: new Date().toISOString(),
-                completedAt: new Date().toISOString(),
-              });
-              removeActiveTask(taskId);
-              setTasks(prev => prev.filter(t => t.taskId !== taskId));
-            }
-          } else {
-            addEntry({
-              id: `${Date.now()}`,
-              taskId,
-              baseTaskId: baseTaskId,
-              thumbnailUrl: currentThumb,
-              modelUrls: currentModel,
-              createdAt: new Date().toISOString(),
-              completedAt: new Date().toISOString(),
-            });
-            removeActiveTask(taskId);
-            setTasks(prev => prev.filter(t => t.taskId !== taskId));
-          }
+          // Refine vorerst deaktiviert, da Fehler bei Parametern
+          addEntry({
+            id: `${Date.now()}`,
+            taskId,
+            baseTaskId: isRefining ? baseTaskId : undefined,
+            thumbnailUrl: currentThumb,
+            modelUrls: currentModel,
+            createdAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+          });
+          removeActiveTask(taskId);
+          setTasks(prev => prev.filter(t => t.taskId !== taskId));
 
           if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } else if (mappedStatus === 'FAILED' || mappedStatus === 'EXPIRED') {
