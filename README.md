@@ -1,4 +1,4 @@
-# Snap2XR AR Sharing Realisierung 🚀
+# Snap2XR AR Sharing Realisierung V3.1.3 🚀
 
 **Snap2XR AR Sharing** ist eine mobile Anwendung, die mithilfe modernster KI-Technologie 2D-Fotos in hochwertige 3D-Modelle verwandelt und diese für Augmented Reality (AR) zugänglich macht.
 
