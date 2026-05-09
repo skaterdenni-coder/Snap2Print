@@ -70,8 +70,39 @@ export default function HistoryScreen() {
     removeEntry(taskId);
   }, [removeEntry]);
 
-  const openUrl = useCallback((url: string) => {
-    Linking.openURL(url);
+  const downloadFile = useCallback(async (url: string, format: string) => {
+    if (Platform.OS === 'web') {
+      try {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const filename = `modell-${Date.now()}.${format.toLowerCase()}`;
+        const file = new File([blob], filename, { type: 'model/gltf-binary' });
+
+        // Prüfen, ob das Teilen von Dateien unterstützt wird
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: '3D Modell',
+            text: 'Mein generiertes 3D Modell',
+          });
+        } else {
+          // Fallback: Direkter Download
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+        }
+      } catch (error) {
+        console.error('Share/Download error:', error);
+        Linking.openURL(url);
+      }
+    } else {
+      Linking.openURL(url);
+    }
   }, []);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string) => {
@@ -195,7 +226,7 @@ export default function HistoryScreen() {
                       overflow: 'hidden',
                     },
                   ]}
-                  onPress={() => openUrl(url)}
+                  onPress={() => downloadFile(url, format)}
                   activeOpacity={0.7}
                 >
                   {isRainbow && (
@@ -239,7 +270,7 @@ export default function HistoryScreen() {
         )}
       </View>
     );
-  }, [colors, isRainbow, entries.length, handleRemove, openUrl, uploadingTaskId, shareToLitterboxAndAR]);
+  }, [colors, isRainbow, entries.length, handleRemove, downloadFile, uploadingTaskId, shareToLitterboxAndAR]);
 
   const renderEmpty = useCallback(() => (
     <View style={styles.emptyContainer}>
