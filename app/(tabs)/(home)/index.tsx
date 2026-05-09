@@ -197,7 +197,7 @@ export default function HomeScreen() {
   const createTaskMutation = useMutation({
     mutationFn: async () => {
       const imageUris = images.map(img => img?.uri || null);
-      if (imageUris.filter(u => u !== null).length < 2) throw new Error('Mindestens 2 Bilder nötig.');
+      if (imageUris.filter(u => u !== null).length < 1) throw new Error('Mindestens 1 Bild nötig.');
       return await createTripoTask(apiKey, imageUris);
     },
     onSuccess: ({ taskId, tokens }) => {
@@ -227,12 +227,34 @@ export default function HomeScreen() {
   });
 
   const handleCreate = useCallback(() => {
-    Animated.sequence([
-      Animated.timing(buttonScale, { toValue: 0.95, duration: 80, useNativeDriver: true }),
-      Animated.timing(buttonScale, { toValue: 1, duration: 80, useNativeDriver: true }),
-    ]).start();
-    createTaskMutation.mutate();
-  }, [createTaskMutation, buttonScale]);
+    const activeImageCount = images.filter(img => img !== null).length;
+
+    if (activeImageCount === 1) {
+      Alert.alert(
+        'Single-View Modus',
+        'Du hast nur ein Bild ausgewählt. Das 3D-Modell wird erstellt, aber das Ergebnis ist mit nur einer Ansicht oft weniger präzise als mit mehreren Bildern. Fortfahren?',
+        [
+          { text: 'Abbrechen', style: 'cancel' },
+          {
+            text: 'Erstellen',
+            onPress: () => {
+              Animated.sequence([
+                Animated.timing(buttonScale, { toValue: 0.95, duration: 80, useNativeDriver: true }),
+                Animated.timing(buttonScale, { toValue: 1, duration: 80, useNativeDriver: true }),
+              ]).start();
+              createTaskMutation.mutate();
+            }
+          }
+        ]
+      );
+    } else {
+      Animated.sequence([
+        Animated.timing(buttonScale, { toValue: 0.95, duration: 80, useNativeDriver: true }),
+        Animated.timing(buttonScale, { toValue: 1, duration: 80, useNativeDriver: true }),
+      ]).start();
+      createTaskMutation.mutate();
+    }
+  }, [createTaskMutation, buttonScale, images]);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string) => {
     setUploadingTaskId(taskId);

@@ -54,7 +54,10 @@ export async function createTripoTask(
   apiKey: string,
   imageUris: (string | null)[]
 ): Promise<{ taskId: string; tokens: string[] }> {
-  console.log('[Tripo] Starte Multiview Task (V3.1)');
+  const validUris = imageUris.filter((u): u is string => u !== null);
+  const isSingleView = validUris.length === 1;
+
+  console.log(`[Tripo] Starte ${isSingleView ? 'Singleview' : 'Multiview'} Task (V3.1)`);
 
   const tokens = await Promise.all(imageUris.map(async (uri) => {
     if (!uri) return null;
@@ -62,14 +65,32 @@ export async function createTripoTask(
   }));
 
   const validTokens = tokens.filter((t): t is string => t !== null);
-  // Tripo Multiview Reihenfolge: Front, Left, Back, Right (0, 1, 3, 2)
-  const tripoOrder = [tokens[0], tokens[1], tokens[3], tokens[2]];
-  const files = tripoOrder.map(token => token ? { type: 'jpg', file_token: token } : {});
 
-  const body = {
-    type: 'multiview_to_model',
-    model_version: 'v3.1-20260211',
-    files: files,
+  let body: any;
+
+  if (isSingleView) {
+    body = {
+      type: 'image_to_model',
+      model_version: 'v3.1-20260211',
+      file: {
+        type: 'jpg',
+        file_token: validTokens[0]
+      }
+    };
+  } else {
+    // Tripo Multiview Reihenfolge: Front, Left, Back, Right (0, 1, 3, 2)
+    const tripoOrder = [tokens[0], tokens[1], tokens[3], tokens[2]];
+    const files = tripoOrder.map(token => token ? { type: 'jpg', file_token: token } : {});
+
+    body = {
+      type: 'multiview_to_model',
+      model_version: 'v3.1-20260211',
+      files: files,
+    };
+  }
+
+  // Gemeinsame Parameter hinzufügen
+  Object.assign(body, {
     face_limit: 2000000,
     texture: true,
     pbr: true,
@@ -78,7 +99,7 @@ export async function createTripoTask(
     texture_alignment: 'original_image',
     orientation: 'align_image',
     orthographic_projection: false
-  };
+  });
 
   const response = await fetch(`${TRIPO_BASE_URL}/task`, {
     method: 'POST',
