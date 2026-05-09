@@ -8,6 +8,7 @@ const ACTIVE_TASKS_KEY = 'active_model_tasks';
 export interface HistoryEntry {
   id: string;
   taskId: string;
+  name?: string;
   baseTaskId?: string;
   thumbnailUrl?: string;
   modelUrls?: {

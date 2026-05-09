@@ -180,7 +180,7 @@ export default function HistoryScreen() {
           )}
           <View style={styles.cardInfo}>
             <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
-              Modell #{entries.length - index}
+              {item.name || `Modell #${entries.length - index}`}
             </Text>
             <View style={styles.dateRow}>
               <Clock size={12} color={colors.textTertiary} />

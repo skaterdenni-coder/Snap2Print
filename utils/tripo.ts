@@ -11,7 +11,10 @@ export interface TripoTask {
     model?: string;
     pbr_model?: string;
     rendered_image?: string;
+    [key: string]: any;
   };
+  input?: any;
+  [key: string]: any;
 }
 
 async function safeParseJson(response: Response) {

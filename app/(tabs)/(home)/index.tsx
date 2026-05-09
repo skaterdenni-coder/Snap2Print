@@ -109,10 +109,20 @@ export default function HomeScreen() {
           clearInterval(interval);
           delete pollIntervals.current[taskId];
 
-          // Refine vorerst deaktiviert, da Fehler bei Parametern
+          // Versuchen einen Namen aus Tripo-Tags oder Prompt zu extrahieren (falls vorhanden)
+          const tripoName = tripoData.input?.prompt || tripoData.output?.label || tripoData.output?.tag;
+          const now = new Date();
+          const day = now.getDate().toString().padStart(2, '0');
+          const month = (now.getMonth() + 1).toString().padStart(2, '0');
+          const hours = now.getHours().toString().padStart(2, '0');
+          const minutes = now.getMinutes().toString().padStart(2, '0');
+          const timestampName = `${day}.${month}. ${hours}:${minutes}`;
+          const finalName = tripoName ? `${tripoName.charAt(0).toUpperCase() + tripoName.slice(1)}` : `Modell ${timestampName}`;
+
           addEntry({
             id: `${Date.now()}`,
             taskId,
+            name: finalName,
             baseTaskId: isRefining ? baseTaskId : undefined,
             thumbnailUrl: currentThumb,
             modelUrls: currentModel,
