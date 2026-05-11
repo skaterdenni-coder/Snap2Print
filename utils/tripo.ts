@@ -97,7 +97,7 @@ export async function createTripoTask(
     face_limit: 2000000,
     texture: true,
     pbr: true,
-    texture_quality: 'standard',
+    texture_quality: 'detailed',
     geometry_quality: 'standard',
     texture_alignment: 'original_image',
     orientation: 'align_image',
