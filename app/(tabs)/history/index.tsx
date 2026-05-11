@@ -17,11 +17,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Box, ExternalLink, Trash2, XCircle, Clock, Share2, AlertTriangle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import { useHistory, HistoryEntry } from '@/contexts/HistoryContext';
+import { getTripoTaskStatus } from '@/utils/tripo';
 import { rainbowGradient } from '@/constants/colors';
 
 export default function HistoryScreen() {
   const { colors, mode } = useTheme();
+  const { apiKey } = useSettings();
   const { entries, removeEntry, clearHistory } = useHistory();
   const insets = useSafeAreaInsets();
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
@@ -70,23 +73,30 @@ export default function HistoryScreen() {
     removeEntry(taskId);
   }, [removeEntry]);
 
-  const downloadFile = useCallback(async (url: string, format: string) => {
-    if (Platform.OS === 'web') {
-      try {
+  const downloadFile = useCallback(async (taskId: string, format: string) => {
+    if (!apiKey) {
+      Alert.alert('Fehler', 'Kein API-Key vorhanden');
+      return;
+    }
+
+    try {
+      // Frische URLs von Tripo holen
+      const tripoData = await getTripoTaskStatus(apiKey, taskId);
+      const url = format === 'glb' ? tripoData.output?.pbr_model || tripoData.output?.model : tripoData.output?.[format.toLowerCase()];
+
+      if (!url) {
+        throw new Error('Download-Link konnte nicht erneuert werden');
+      }
+
+      if (Platform.OS === 'web') {
         const response = await fetch(url);
         const blob = await response.blob();
-        const filename = `modell-${Date.now()}.${format.toLowerCase()}`;
+        const filename = `modell-${taskId}.${format.toLowerCase()}`;
         const file = new File([blob], filename, { type: 'model/gltf-binary' });
 
-        // Prüfen, ob das Teilen von Dateien unterstützt wird
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: '3D Modell',
-            text: 'Mein generiertes 3D Modell',
-          });
+          await navigator.share({ files: [file], title: '3D Modell', text: 'Mein 3D Modell' });
         } else {
-          // Fallback: Direkter Download
           const blobUrl = window.URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = blobUrl;
@@ -96,18 +106,25 @@ export default function HistoryScreen() {
           document.body.removeChild(link);
           window.URL.revokeObjectURL(blobUrl);
         }
-      } catch (error) {
-        console.error('Share/Download error:', error);
+      } else {
         Linking.openURL(url);
       }
-    } else {
-      Linking.openURL(url);
+    } catch (error) {
+      console.error('Download/Refresh error:', error);
+      Alert.alert('Fehler', 'Der Download-Link konnte nicht geladen werden. Möglicherweise wurde das Modell bei Tripo gelöscht.');
     }
-  }, []);
+  }, [apiKey]);
 
-  const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string) => {
+  const shareToLitterboxAndAR = useCallback(async (taskId: string) => {
+    if (!apiKey) return;
     setUploadingTaskId(taskId);
     try {
+      // Frische URL von Tripo holen
+      const tripoData = await getTripoTaskStatus(apiKey, taskId);
+      const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model;
+
+      if (!glbUrl) throw new Error('GLB URL nicht gefunden');
+
       const formData = new FormData();
       formData.append('reqtype', 'fileupload');
       formData.append('time', '24h');
@@ -146,7 +163,7 @@ export default function HistoryScreen() {
     } finally {
       setUploadingTaskId(null);
     }
-  }, []);
+  }, [apiKey]);
 
   const renderItem = useCallback(({ item, index }: { item: HistoryEntry; index: number }) => {
     const formatCount = item.modelUrls
@@ -226,7 +243,7 @@ export default function HistoryScreen() {
                       overflow: 'hidden',
                     },
                   ]}
-                  onPress={() => downloadFile(url, format)}
+                  onPress={() => downloadFile(item.taskId, format)}
                   activeOpacity={0.7}
                 >
                   {isRainbow && (
@@ -253,7 +270,7 @@ export default function HistoryScreen() {
                     borderColor: colors.success + '30',
                   },
                 ]}
-                onPress={() => item.modelUrls?.glb && shareToLitterboxAndAR(item.taskId, item.modelUrls.glb)}
+                onPress={() => shareToLitterboxAndAR(item.taskId)}
                 disabled={uploadingTaskId === item.taskId}
               >
                 {uploadingTaskId === item.taskId ? (
