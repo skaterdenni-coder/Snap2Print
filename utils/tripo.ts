@@ -92,7 +92,7 @@ export async function createTripoTask(
     };
   }
 
-  // Gemeinsame Parameter hinzufügen
+  // Parameter hinzufügen
   Object.assign(body, {
     face_limit: 2000000,
     texture: true,
