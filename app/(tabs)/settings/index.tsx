@@ -31,6 +31,8 @@ export default function SettingsScreen() {
   const [keyInput, setKeyInput] = useState<string>(apiKey);
   const [showKey, setShowKey] = useState<boolean>(false);
   const [saved, setSaved] = useState<boolean>(false);
+  const [darkClicks, setDarkClicks] = useState<number>(0);
+  const [isRainbowUnlocked, setIsRainbowUnlocked] = useState<boolean>(mode === 'rainbow');
   const checkScale = useRef(new Animated.Value(0)).current;
 
   const isRainbow = mode === 'rainbow';
@@ -52,6 +54,17 @@ export default function SettingsScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+
+    if (newMode === 'dark') {
+      const nextClicks = darkClicks + 1;
+      setDarkClicks(nextClicks);
+      if (nextClicks >= 5) {
+        setIsRainbowUnlocked(true);
+      }
+    } else {
+      setDarkClicks(0);
+    }
+
     setThemeMode(newMode);
   };
 
@@ -139,7 +152,7 @@ export default function SettingsScreen() {
           </View>
 
           <View style={styles.themeGrid}>
-            {THEME_OPTIONS.map((option) => {
+            {THEME_OPTIONS.filter(opt => opt.mode !== 'rainbow' || isRainbowUnlocked).map((option) => {
               const isActive = mode === option.mode;
               const IconComp = option.icon;
               return (
