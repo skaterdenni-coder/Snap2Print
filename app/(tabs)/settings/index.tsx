@@ -13,20 +13,22 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield } from 'lucide-react-native';
+import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield, Languages } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useLanguage, Language } from '@/contexts/LanguageContext';
 import { ThemeMode, rainbowGradient } from '@/constants/colors';
 
-const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
-  { mode: 'light', label: 'Hell', icon: Sun },
-  { mode: 'dark', label: 'Dunkel', icon: Moon },
-  { mode: 'rainbow', label: 'Regenbogen', icon: Rainbow },
+const THEME_OPTIONS: { mode: ThemeMode; icon: typeof Sun }[] = [
+  { mode: 'light', icon: Sun },
+  { mode: 'dark', icon: Moon },
+  { mode: 'rainbow', icon: Rainbow },
 ];
 
 export default function SettingsScreen() {
   const { colors, mode, setThemeMode } = useTheme();
   const { apiKey, setApiKey } = useSettings();
+  const { language, setLanguage, t } = useLanguage();
   const insets = useSafeAreaInsets();
   const [keyInput, setKeyInput] = useState<string>(apiKey);
   const [showKey, setShowKey] = useState<boolean>(false);
@@ -68,6 +70,19 @@ export default function SettingsScreen() {
     setThemeMode(newMode);
   };
 
+  const handleLanguageChange = (newLang: Language) => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setLanguage(newLang);
+  };
+
+  const getThemeLabel = (mode: ThemeMode) => {
+    if (mode === 'light') return t.light;
+    if (mode === 'dark') return t.dark;
+    return t.rainbow;
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView
@@ -78,10 +93,10 @@ export default function SettingsScreen() {
         <View style={styles.header}>
           {isRainbow ? (
             <LinearGradient colors={rainbowGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.titleGradient}>
-              <Text style={[styles.title, { color: '#FFF' }]}>Einstellungen</Text>
+              <Text style={[styles.title, { color: '#FFF' }]}>{t.settingsTitle}</Text>
             </LinearGradient>
           ) : (
-            <Text style={[styles.title, { color: colors.text }]}>Einstellungen</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{t.settingsTitle}</Text>
           )}
         </View>
 
@@ -91,7 +106,7 @@ export default function SettingsScreen() {
               <Key size={18} color={colors.accent} />
             </View>
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Tripo API-Key</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.apiKey}</Text>
 
             </View>
           </View>
@@ -133,7 +148,7 @@ export default function SettingsScreen() {
                 <Check size={20} color="#FFF" />
               </Animated.View>
             ) : (
-              <Text style={styles.saveButtonText}>Speichern</Text>
+              <Text style={styles.saveButtonText}>{t.save}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -144,9 +159,9 @@ export default function SettingsScreen() {
               <Sun size={18} color={colors.accent} />
             </View>
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Erscheinungsbild</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.appearance}</Text>
               <Text style={[styles.sectionDescription, { color: colors.textTertiary }]}>
-                Wähle dein bevorzugtes Design
+                {t.appearanceDesc}
               </Text>
             </View>
           </View>
@@ -201,7 +216,56 @@ export default function SettingsScreen() {
                       { color: isActive ? colors.accent : colors.textSecondary },
                     ]}
                   >
-                    {option.label}
+                    {getThemeLabel(option.mode)}
+                  </Text>
+                  {isActive && (
+                    <View style={[styles.activeIndicator, { backgroundColor: colors.accent }]}>
+                      <Check size={10} color="#FFF" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconCircle, { backgroundColor: colors.accent + '15' }]}>
+              <Languages size={18} color={colors.accent} />
+            </View>
+            <View>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.language}</Text>
+              <Text style={[styles.sectionDescription, { color: colors.textTertiary }]}>
+                {t.languageDesc}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.themeGrid}>
+            {(['de', 'en'] as const).map((lang) => {
+              const isActive = language === lang;
+              return (
+                <TouchableOpacity
+                  key={lang}
+                  style={[
+                    styles.themeOption,
+                    {
+                      backgroundColor: isActive ? colors.accent + '15' : colors.inputBackground,
+                      borderColor: isActive ? colors.accent : colors.inputBorder,
+                      borderWidth: isActive ? 2 : 1,
+                    },
+                  ]}
+                  onPress={() => handleLanguageChange(lang)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.themeLabel,
+                      { color: isActive ? colors.accent : colors.textSecondary, fontSize: 16 },
+                    ]}
+                  >
+                    {lang === 'de' ? 'Deutsch' : 'English'}
                   </Text>
                   {isActive && (
                     <View style={[styles.activeIndicator, { backgroundColor: colors.accent }]}>

@@ -19,6 +19,7 @@ import { ImagePlus, X, Sparkles, Box, Clock, CheckCircle, AlertCircle, Loader, S
 import { useMutation } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { createTripoTask, getTripoTaskStatus, mapTripoStatus, createTripoRefineTask, imageUriToBase64DataUrl } from '@/utils/tripo';
 import { rainbowGradient } from '@/constants/colors';
 import { useHistory } from '@/contexts/HistoryContext';
@@ -41,16 +42,10 @@ interface TaskEntry {
   isRefining?: boolean;
 }
 
-const PLACEHOLDERS = [
-  { id: 'p1', label: '45° Vorne' },
-  { id: 'p2', label: 'Links' },
-  { id: 'p3', label: 'Rechts' },
-  { id: 'p4', label: 'Hinten' },
-];
-
 export default function HomeScreen() {
   const { colors, mode } = useTheme();
   const { apiKey, hasApiKey } = useSettings();
+  const { t } = useLanguage();
   const {
     addEntry,
     activeTasks,
@@ -60,6 +55,13 @@ export default function HomeScreen() {
     updateTaskProgress
   } = useHistory();
   const insets = useSafeAreaInsets();
+
+  const PLACEHOLDERS = [
+    { id: 'p1', label: t.placeholders.front },
+    { id: 'p2', label: t.placeholders.left },
+    { id: 'p3', label: t.placeholders.right },
+    { id: 'p4', label: t.placeholders.back },
+  ];
 
   const [images, setImages] = useState<(SelectedImage | null)[]>([null, null, null, null]);
   const [tasks, setTasks] = useState<TaskEntry[]>([]);
@@ -117,7 +119,7 @@ export default function HomeScreen() {
           const hours = now.getHours().toString().padStart(2, '0');
           const minutes = now.getMinutes().toString().padStart(2, '0');
           const timestampName = `${day}.${month}. ${hours}:${minutes}`;
-          const finalName = tripoName ? `${tripoName.charAt(0).toUpperCase() + tripoName.slice(1)}` : `Modell ${timestampName}`;
+          const finalName = tripoName ? `${tripoName.charAt(0).toUpperCase() + tripoName.slice(1)}` : `${t.model} ${timestampName}`;
 
           addEntry({
             id: `${Date.now()}`,
@@ -145,7 +147,7 @@ export default function HomeScreen() {
       }
     }, 4000);
     pollIntervals.current[taskId] = interval;
-  }, [apiKey, addEntry, updateTaskProgress, updateActiveTask, removeActiveTask]);
+  }, [apiKey, addEntry, updateTaskProgress, updateActiveTask, removeActiveTask, t.model]);
 
   useEffect(() => {
     if (hasApiKey && apiKey && activeTasks.length > 0) {
@@ -195,7 +197,7 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('ImagePicker Error:', error);
     }
-  }, [images]);
+  }, [images, PLACEHOLDERS]);
 
   const removeImage = useCallback((index: number) => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -207,7 +209,7 @@ export default function HomeScreen() {
   const createTaskMutation = useMutation({
     mutationFn: async () => {
       const imageUris = images.map(img => img?.uri || null);
-      if (imageUris.filter(u => u !== null).length < 1) throw new Error('Mindestens 1 Bild nötig.');
+      if (imageUris.filter(u => u !== null).length < 1) throw new Error(t.minOneImage);
       return await createTripoTask(apiKey, imageUris);
     },
     onSuccess: ({ taskId, tokens }) => {
@@ -233,7 +235,7 @@ export default function HomeScreen() {
       startPolling(taskId);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: (error: Error) => Alert.alert('Fehler', error.message),
+    onError: (error: Error) => Alert.alert(t.error, error.message),
   });
 
   const handleCreate = useCallback(() => {
@@ -241,12 +243,12 @@ export default function HomeScreen() {
 
     if (activeImageCount === 1) {
       Alert.alert(
-        'Single-View Modus',
-        'Du hast nur ein Bild ausgewählt. Das 3D-Modell wird erstellt, aber das Ergebnis ist mit nur einer Ansicht oft weniger präzise als mit mehreren Bildern. Fortfahren?',
+        t.singleViewTitle,
+        t.singleViewDesc,
         [
-          { text: 'Abbrechen', style: 'cancel' },
+          { text: t.cancel, style: 'cancel' },
           {
-            text: 'Erstellen',
+            text: t.create,
             onPress: () => {
               Animated.sequence([
                 Animated.timing(buttonScale, { toValue: 0.95, duration: 80, useNativeDriver: true }),
@@ -264,7 +266,7 @@ export default function HomeScreen() {
       ]).start();
       createTaskMutation.mutate();
     }
-  }, [createTaskMutation, buttonScale, images]);
+  }, [createTaskMutation, buttonScale, images, t]);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string) => {
     setUploadingTaskId(taskId);
@@ -277,11 +279,19 @@ export default function HomeScreen() {
       const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
       const litterboxUrl = await uploadRes.text();
       const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl.trim())}`;
-      await Share.share({ message: `Schau dir mein 3D-Modell in AR an: ${viewerUrl}`, url: viewerUrl, title: 'AR Modell teilen' });
-    } catch (e) { Alert.alert('Fehler', 'Upload fehlgeschlagen'); } finally { setUploadingTaskId(null); }
-  }, []);
+      await Share.share({ message: `Check out my 3D model in AR: ${viewerUrl}`, url: viewerUrl, title: 'Share AR Model' });
+    } catch (e) { Alert.alert(t.error, t.uploadFailed); } finally { setUploadingTaskId(null); }
+  }, [t]);
 
   const getRainbowColor = (index: number) => rainbowGradient[index % rainbowGradient.length];
+
+  const getStatusLabel = (status: string) => {
+    if (status === 'PENDING') return t.status.pending;
+    if (status === 'IN_PROGRESS') return t.status.progress;
+    if (status === 'SUCCEEDED') return t.status.success;
+    if (status === 'FAILED') return t.status.failed;
+    return t.status.expired;
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -292,7 +302,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Bilder auswählen</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.selectImages}</Text>
         </View>
 
         <View style={styles.imageGrid}>
@@ -324,13 +334,13 @@ export default function HomeScreen() {
             onPress={handleCreate}
             disabled={images.every(img => img === null) || !hasApiKey || createTaskMutation.isPending}
           >
-            {createTaskMutation.isPending ? <ActivityIndicator color="#FFF" size="small" /> : <><Text style={styles.createButtonText}>3D-Modell erstellen</Text></>}
+            {createTaskMutation.isPending ? <ActivityIndicator color="#FFF" size="small" /> : <><Text style={styles.createButtonText}>{t.createModel}</Text></>}
           </TouchableOpacity>
         </Animated.View>
 
         {tasks.length > 0 && (
           <View style={styles.tasksSection}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Aktive Aufgaben</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.activeTasks}</Text>
             {tasks.map((task, idx) => (
               <View key={task.id} style={[styles.taskCard, { backgroundColor: colors.card, borderColor: isRainbow ? getRainbowColor(idx + 5) : colors.cardBorder, borderWidth: isRainbow ? 2 : 1 }]}>
                 <View style={styles.taskHeader}>
@@ -339,7 +349,7 @@ export default function HomeScreen() {
                     <View style={styles.statusRow}>
                       {getStatusIcon(task.status)}
                       <Text style={[styles.statusText, { color: colors.text }]}>
-                        {task.isRefining ? 'Textur-Optimierung...' : getStatusText(task.status)}
+                        {task.isRefining ? t.textureOptimization : getStatusLabel(task.status)}
                       </Text>
                     </View>
                     {(task.status === 'PENDING' || task.status === 'IN_PROGRESS') && <View style={styles.progressBarContainer}><View style={[styles.progressBarBg, { backgroundColor: colors.inputBackground }]}><View style={[styles.progressBarFill, { width: `${task.progress}%`, backgroundColor: isRainbow ? getRainbowColor(idx + 5) : colors.accent }]} /></View><Text style={[styles.progressText, { color: colors.textSecondary }]}>{task.progress}%</Text></View>}
@@ -347,7 +357,7 @@ export default function HomeScreen() {
                 </View>
                 {task.status === 'SUCCEEDED' && task.modelUrls && (
                   <View style={styles.downloadLinks}>
-                    {task.modelUrls.glb && <TouchableOpacity style={[styles.shareChip, { backgroundColor: colors.success + '15', borderColor: colors.success + '30' }]} onPress={() => task.modelUrls?.glb && shareToLitterboxAndAR(task.id, task.modelUrls.glb)} disabled={uploadingTaskId === task.id}>{uploadingTaskId === task.id ? <ActivityIndicator size="small" color={colors.success} /> : <><Share2 size={12} color={colors.success} /><Text style={[styles.shareChipText, { color: colors.success }]}>AR TEILEN</Text></>}</TouchableOpacity>}
+                    {task.modelUrls.glb && <TouchableOpacity style={[styles.shareChip, { backgroundColor: colors.success + '15', borderColor: colors.success + '30' }]} onPress={() => task.modelUrls?.glb && shareToLitterboxAndAR(task.id, task.modelUrls.glb)} disabled={uploadingTaskId === task.id}>{uploadingTaskId === task.id ? <ActivityIndicator size="small" color={colors.success} /> : <><Share2 size={12} color={colors.success} /><Text style={[styles.shareChipText, { color: colors.success }]}>{t.arShare}</Text></>}</TouchableOpacity>}
                   </View>
                 )}
               </View>

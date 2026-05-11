@@ -5,7 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 const API_KEY_STORAGE = 'tripo_api_key'; // Geändert von meshy_api_key
 
 export const [SettingsProvider, useSettings] = createContextHook(() => {
-  const [apiKey, setApiKeyState] = useState<string>('tsk_SlsRbNuJ1LlNsLUJlfqAsQxDSiuRxfC8Vpst3EJsmWq');
+  const [apiKey, setApiKeyState] = useState<string>('');
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
 
   useEffect(() => {

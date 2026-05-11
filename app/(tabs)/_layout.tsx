@@ -4,10 +4,12 @@ import React from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { View } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { rainbowGradient } from '@/constants/colors';
 
 export default function TabLayout() {
   const { colors, mode } = useTheme();
+  const { t } = useLanguage();
   const isRainbow = mode === 'rainbow';
 
   return (
@@ -26,21 +28,21 @@ export default function TabLayout() {
       <Tabs.Screen
         name="(home)"
         options={{
-          title: 'Erstellen',
+          title: t.tabHome,
           tabBarIcon: ({ color, size }) => <Box size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="history"
         options={{
-          title: 'Historie',
+          title: t.tabHistory,
           tabBarIcon: ({ color, size }) => <Clock size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Einstellungen',
+          title: t.tabSettings,
           tabBarIcon: ({ color, size }) => <Settings size={size} color={color} />,
         }}
       />
