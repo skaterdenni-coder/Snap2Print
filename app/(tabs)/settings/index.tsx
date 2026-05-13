@@ -14,9 +14,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield, Languages, HelpCircle } from 'lucide-react-native';
+import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield, Languages, HelpCircle, Zap, Sparkles } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useSettings } from '@/contexts/SettingsContext';
+import { useSettings, QualityMode } from '@/contexts/SettingsContext';
 import { useLanguage, Language } from '@/contexts/LanguageContext';
 import { ThemeMode, rainbowGradient } from '@/constants/colors';
 
@@ -28,14 +28,17 @@ const THEME_OPTIONS: { mode: ThemeMode; icon: typeof Sun }[] = [
 
 export default function SettingsScreen() {
   const { colors, mode, setThemeMode } = useTheme();
-  const { apiKey, setApiKey } = useSettings();
+  const { apiKey, setApiKey, qualityMode, setQualityMode } = useSettings();
   const { language, setLanguage, t } = useLanguage();
   const insets = useSafeAreaInsets();
   const [keyInput, setKeyInput] = useState<string>(apiKey);
   const [showKey, setShowKey] = useState<boolean>(false);
   const [saved, setSaved] = useState<boolean>(false);
   const [darkClicks, setDarkClicks] = useState<number>(0);
+  const [langSwitches, setLangSwitches] = useState<number>(0);
+  const [lastLang, setLastLang] = useState<Language>(language);
   const [isRainbowUnlocked, setIsRainbowUnlocked] = useState<boolean>(mode === 'rainbow');
+  const [isQualityUnlocked, setIsQualityUnlocked] = useState<boolean>(false);
   const checkScale = useRef(new Animated.Value(0)).current;
 
   const isRainbow = mode === 'rainbow';
@@ -75,6 +78,22 @@ export default function SettingsScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
+
+    if (newLang !== lastLang) {
+      const nextSwitches = langSwitches + 1;
+      setLangSwitches(nextSwitches);
+      setLastLang(newLang);
+      if (nextSwitches >= 10) { // 5 mal abwechselnd = 10 Wechsel
+        if (!isQualityUnlocked) {
+          setIsQualityUnlocked(true);
+          if (Platform.OS !== 'web') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+          Alert.alert("Secret Unlocked", "Quality Selector is now available!");
+        }
+      }
+    }
+
     setLanguage(newLang);
   };
 
@@ -290,6 +309,62 @@ export default function SettingsScreen() {
             })}
           </View>
         </View>
+
+        {isQualityUnlocked && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionIconCircle, { backgroundColor: colors.accent + '15' }]}>
+                <Sparkles size={18} color={colors.accent} />
+              </View>
+              <View>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Generation Quality</Text>
+                <Text style={[styles.sectionDescription, { color: colors.textTertiary }]}>
+                  Choose between speed and high fidelity
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.themeGrid}>
+              {(['fast', 'detailed'] as const).map((q) => {
+                const isActive = qualityMode === q;
+                const Icon = q === 'fast' ? Zap : Sparkles;
+                return (
+                  <TouchableOpacity
+                    key={q}
+                    style={[
+                      styles.themeOption,
+                      {
+                        backgroundColor: isActive ? colors.accent + '15' : colors.inputBackground,
+                        borderColor: isActive ? colors.accent : colors.inputBorder,
+                        borderWidth: isActive ? 2 : 1,
+                      },
+                    ]}
+                    onPress={() => {
+                      setQualityMode(q);
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Icon size={22} color={isActive ? colors.accent : colors.textSecondary} />
+                    <Text
+                      style={[
+                        styles.themeLabel,
+                        { color: isActive ? colors.accent : colors.textSecondary, fontSize: 16 },
+                      ]}
+                    >
+                      {q === 'fast' ? 'Fast' : 'Detailed'}
+                    </Text>
+                    {isActive && (
+                      <View style={[styles.activeIndicator, { backgroundColor: colors.accent }]}>
+                        <Check size={10} color="#FFF" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         <Text style={[styles.footerText, { color: colors.textTertiary }]}>
           created by Dennis Werner 2026 V0.5.5.

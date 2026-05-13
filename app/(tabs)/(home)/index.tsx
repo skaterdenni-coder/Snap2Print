@@ -51,7 +51,7 @@ const HELP_IMAGES: Record<string, any> = {
 
 export default function HomeScreen() {
   const { colors, mode } = useTheme();
-  const { apiKey, hasApiKey } = useSettings();
+  const { apiKey, hasApiKey, qualityMode } = useSettings();
   const { t } = useLanguage();
   const {
     addEntry,
@@ -239,7 +239,7 @@ export default function HomeScreen() {
     mutationFn: async () => {
       const imageUris = images.map(img => img?.uri || null);
       if (imageUris.filter(u => u !== null).length < 1) throw new Error(t.minOneImage);
-      return await createTripoTask(apiKey, imageUris);
+      return await createTripoTask(apiKey, imageUris, qualityMode);
     },
     onSuccess: ({ taskId, tokens }) => {
       const entry: TaskEntry = {
