@@ -1,4 +1,4 @@
-# Snap2XR - Mobile AI 3D Creator 🚀
+# 2D zu 3D Prozesspipeline Snap2XR 🚀
 
 **Snap2XR** ist eine leistungsstarke mobile Anwendung, die mithilfe von KI-Technologie 2D-Fotos in hochwertige 3D-Modelle verwandelt und diese sofort für Augmented Reality (AR) bereitstellt.
 
