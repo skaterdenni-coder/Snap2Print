@@ -10,12 +10,13 @@ import {
   ActivityIndicator,
   Platform,
   Share,
+  Modal,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ImagePlus, X, Sparkles, Box, Clock, CheckCircle, AlertCircle, Loader, Share2 } from 'lucide-react-native';
+import { ImagePlus, X, Sparkles, Box, Clock, CheckCircle, AlertCircle, Loader, Share2, HelpCircle } from 'lucide-react-native';
 import { useMutation } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
@@ -56,6 +57,13 @@ export default function HomeScreen() {
   } = useHistory();
   const insets = useSafeAreaInsets();
 
+  const HELP_IMAGES: Record<string, any> = {
+    p1: require('@/assets/images/B1.jpg'),
+    p2: require('@/assets/images/B2.jpg'),
+    p3: require('@/assets/images/B3.jpeg'),
+    p4: require('@/assets/images/B4.jpg'),
+  };
+
   const PLACEHOLDERS = [
     { id: 'p1', label: t.placeholders.front },
     { id: 'p2', label: t.placeholders.left },
@@ -66,6 +74,7 @@ export default function HomeScreen() {
   const [images, setImages] = useState<(SelectedImage | null)[]>([null, null, null, null]);
   const [tasks, setTasks] = useState<TaskEntry[]>([]);
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
+  const [hoveredHelpId, setHoveredHelpId] = useState<string | null>(null);
   const pollIntervals = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const buttonScale = useRef(new Animated.Value(1)).current;
 
@@ -308,6 +317,24 @@ export default function HomeScreen() {
         <View style={styles.imageGrid}>
           {images.map((img, idx) => (
             <View key={PLACEHOLDERS[idx].id} style={[styles.imageCard, { backgroundColor: colors.card, borderColor: isRainbow ? getRainbowColor(idx) : colors.cardBorder, borderWidth: isRainbow ? 2 : 1 }]}>
+              <TouchableOpacity
+                style={[styles.helpBadge, { backgroundColor: colors.card + 'CC' }]}
+                onPressIn={() => setHoveredHelpId(PLACEHOLDERS[idx].id)}
+                onPressOut={() => setHoveredHelpId(null)}
+                activeOpacity={0.7}
+              >
+                <HelpCircle size={16} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              {hoveredHelpId === PLACEHOLDERS[idx].id && (
+                <View style={styles.hoverOverlay} pointerEvents="none">
+                  <Image source={HELP_IMAGES[PLACEHOLDERS[idx].id]} style={styles.hoverImage} contentFit="cover" />
+                  <View style={styles.hoverLabel}>
+                    <Text style={styles.hoverLabelText}>{t.help}</Text>
+                  </View>
+                </View>
+              )}
+
               {img ? (
                 <>
                   <Image source={{ uri: img.uri }} style={styles.imagePreview} contentFit="cover" />
@@ -399,6 +426,45 @@ const styles = StyleSheet.create({
   removeButton: { position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', zIndex: 10 },
   labelBadge: { position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   labelText: { color: '#FFF', fontSize: 10, fontWeight: '700' },
+  helpBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(150,150,150,0.2)',
+  },
+  hoverOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+    zIndex: 25,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  hoverImage: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.9,
+  },
+  hoverLabel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  hoverLabelText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   createButton: { height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 },
   createButtonText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
   tasksSection: { marginTop: 24 },
