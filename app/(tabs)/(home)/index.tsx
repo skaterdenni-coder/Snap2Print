@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
   helpBadge: {
     position: 'absolute',
     top: 6,
-    right: 6,
+    left: 6,
     width: 32,
     height: 32,
     borderRadius: 16,
