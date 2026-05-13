@@ -44,10 +44,10 @@ interface TaskEntry {
 }
 
 const HELP_IMAGES: Record<string, any> = {
-  p1: require('@/assets/images/B1.jpg'),
-  p2: require('@/assets/images/B2.jpg'),
-  p3: require('@/assets/images/B3.jpeg'),
-  p4: require('@/assets/images/B4.jpg'),
+  p1: require('../../../assets/images/B1.png'),
+  p2: require('../../../assets/images/B2.png'),
+  p3: require('../../../assets/images/B3.png'),
+  p4: require('../../../assets/images/B4.png'),
 };
 
 export default function HomeScreen() {
@@ -74,7 +74,7 @@ export default function HomeScreen() {
   const [images, setImages] = useState<(SelectedImage | null)[]>([null, null, null, null]);
   const [tasks, setTasks] = useState<TaskEntry[]>([]);
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
-  const [activeHelpImage, setActiveHelpImage] = useState<any>(null);
+  const [activeHelpIdx, setActiveHelpIdx] = useState<number | null>(null);
   const pollIntervals = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const buttonScale = useRef(new Animated.Value(1)).current;
 
@@ -315,36 +315,45 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.imageGrid}>
-          {images.map((img, idx) => (
-            <View key={PLACEHOLDERS[idx].id} style={[styles.imageCard, { backgroundColor: colors.card, borderColor: isRainbow ? getRainbowColor(idx) : colors.cardBorder, borderWidth: isRainbow ? 2 : 1 }]}>
-              <TouchableOpacity
-                style={[styles.helpBadge, { backgroundColor: colors.card + 'CC' }]}
-                onPressIn={() => setActiveHelpImage(HELP_IMAGES[PLACEHOLDERS[idx].id])}
-                onPressOut={() => setActiveHelpImage(null)}
-                delayLongPress={100}
-                activeOpacity={0.6}
-              >
-                <HelpCircle size={16} color={colors.textSecondary} />
-              </TouchableOpacity>
-
-              {img ? (
-                <>
-                  <Image source={{ uri: img.uri }} style={styles.imagePreview} contentFit="cover" />
-                  <TouchableOpacity style={[styles.removeButton, { backgroundColor: colors.danger }]} onPress={() => removeImage(idx)}>
-                    <X size={14} color="#FFF" />
-                  </TouchableOpacity>
-                  <View style={styles.labelBadge}><Text style={styles.labelText}>{img.label}</Text></View>
-                </>
-              ) : (
-                <TouchableOpacity style={styles.addImagePlaceholder} onPress={() => pickImage(idx)}>
-                   <View style={[styles.addIconCircle, { backgroundColor: (isRainbow ? getRainbowColor(idx) : colors.accent) + '10' }]}>
-                    <ImagePlus size={24} color={isRainbow ? getRainbowColor(idx) : colors.accent} />
+          {images.map((img, idx) => {
+            const isShowingHelp = activeHelpIdx === idx;
+            return (
+              <View key={PLACEHOLDERS[idx].id} style={[styles.imageCard, { backgroundColor: colors.card, borderColor: isRainbow ? getRainbowColor(idx) : colors.cardBorder, borderWidth: isRainbow ? 2 : 1 }]}>
+                {isShowingHelp ? (
+                  <View style={styles.imagePreview}>
+                    <Image source={HELP_IMAGES[PLACEHOLDERS[idx].id]} style={StyleSheet.absoluteFill} contentFit="cover" />
+                    <View style={styles.helpOverlayLabel}>
+                      <Text style={styles.helpOverlayText}>{t.help}</Text>
+                    </View>
                   </View>
-                  <Text style={[styles.addImageText, { color: colors.textSecondary }]}>{PLACEHOLDERS[idx].label}</Text>
+                ) : img ? (
+                  <>
+                    <Image source={{ uri: img.uri }} style={styles.imagePreview} contentFit="cover" />
+                    <TouchableOpacity style={[styles.removeButton, { backgroundColor: colors.danger }]} onPress={() => removeImage(idx)}>
+                      <X size={14} color="#FFF" />
+                    </TouchableOpacity>
+                    <View style={styles.labelBadge}><Text style={styles.labelText}>{img.label}</Text></View>
+                  </>
+                ) : (
+                  <TouchableOpacity style={styles.addImagePlaceholder} onPress={() => pickImage(idx)}>
+                    <View style={[styles.addIconCircle, { backgroundColor: (isRainbow ? getRainbowColor(idx) : colors.accent) + '10' }]}>
+                      <ImagePlus size={24} color={isRainbow ? getRainbowColor(idx) : colors.accent} />
+                    </View>
+                    <Text style={[styles.addImageText, { color: colors.textSecondary }]}>{PLACEHOLDERS[idx].label}</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.helpBadge, { backgroundColor: colors.card + 'E6' }]}
+                  onPressIn={() => setActiveHelpIdx(idx)}
+                  onPressOut={() => setActiveHelpIdx(null)}
+                  activeOpacity={0.8}
+                >
+                  <HelpCircle size={18} color={isShowingHelp ? colors.accent : colors.textSecondary} />
                 </TouchableOpacity>
-              )}
-            </View>
-          ))}
+              </View>
+            );
+          })}
         </View>
 
         <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
@@ -384,15 +393,6 @@ export default function HomeScreen() {
           </View>
         )}
       </ScrollView>
-
-      {activeHelpImage && (
-        <View style={[StyleSheet.absoluteFill, styles.globalHelpOverlay]} pointerEvents="none">
-          <View style={[styles.globalHelpCard, { backgroundColor: colors.card }]}>
-            <Image source={activeHelpImage} style={styles.globalHelpImage} contentFit="contain" />
-            <Text style={[styles.globalHelpText, { color: colors.textSecondary }]}>{t.help}</Text>
-          </View>
-        </View>
-      )}
     </View>
   );
 }
@@ -429,44 +429,36 @@ const styles = StyleSheet.create({
   labelText: { color: '#FFF', fontSize: 10, fontWeight: '700' },
   helpBadge: {
     position: 'absolute',
-    top: 8,
-    left: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    top: 6,
+    right: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 30,
+    zIndex: 50,
     borderWidth: 1,
-    borderColor: 'rgba(150,150,150,0.2)',
-  },
-  globalHelpOverlay: {
-    zIndex: 100,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  globalHelpCard: {
-    width: '80%',
-    aspectRatio: 1,
-    borderRadius: 24,
-    padding: 16,
-    alignItems: 'center',
-    gap: 12,
+    borderColor: 'rgba(150,150,150,0.3)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  globalHelpImage: {
-    flex: 1,
-    width: '100%',
-    borderRadius: 12,
+  helpOverlayLabel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 4,
+    alignItems: 'center',
   },
-  globalHelpText: {
-    fontSize: 14,
-    fontWeight: '700',
+  helpOverlayText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
   createButton: { height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 },
   createButtonText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
