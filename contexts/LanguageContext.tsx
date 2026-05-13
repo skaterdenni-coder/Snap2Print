@@ -66,6 +66,7 @@ const translations = {
     rainbow: 'Regenbogen',
     language: 'Sprache',
     languageDesc: 'Wähle die App-Sprache',
+    help: 'Hilfe',
   },
   en: {
     // Tabs
@@ -126,6 +127,7 @@ const translations = {
     rainbow: 'Rainbow',
     language: 'Language',
     languageDesc: 'Select app language',
+    help: 'Help',
   }
 };
 

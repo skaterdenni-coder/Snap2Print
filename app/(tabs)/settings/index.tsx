@@ -9,11 +9,12 @@ import {
   Alert,
   Animated,
   Platform,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield, Languages } from 'lucide-react-native';
+import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield, Languages, HelpCircle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useLanguage, Language } from '@/contexts/LanguageContext';
@@ -77,6 +78,10 @@ export default function SettingsScreen() {
     setLanguage(newLang);
   };
 
+  const openHelp = () => {
+    Linking.openURL('https://www.youtube.com/watch?v=x8jhxstnwY8&t=9s');
+  };
+
   const getThemeLabel = (mode: ThemeMode) => {
     if (mode === 'light') return t.light;
     if (mode === 'dark') return t.dark;
@@ -90,7 +95,7 @@ export default function SettingsScreen() {
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
+        <View style={[styles.header, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
           {isRainbow ? (
             <LinearGradient colors={rainbowGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.titleGradient}>
               <Text style={[styles.title, { color: '#FFF' }]}>{t.settingsTitle}</Text>
@@ -98,6 +103,14 @@ export default function SettingsScreen() {
           ) : (
             <Text style={[styles.title, { color: colors.text }]}>{t.settingsTitle}</Text>
           )}
+
+          <TouchableOpacity
+            style={[styles.helpButton, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+            onPress={openHelp}
+            accessibilityLabel={t.help}
+          >
+            <Text style={[styles.helpText, { color: colors.textSecondary }]}>?</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
@@ -308,6 +321,18 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '800' as const,
     letterSpacing: -0.5,
+  },
+  helpButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  helpText: {
+    fontSize: 18,
+    fontWeight: '700' as const,
   },
   sectionCard: {
     borderRadius: 20,
