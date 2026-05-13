@@ -79,7 +79,7 @@ export default function SettingsScreen() {
   };
 
   const openHelp = () => {
-    Linking.openURL('https://www.youtube.com/watch?v=x8jhxstnwY8&t=9s' );
+    Linking.openURL('https://www.youtube.com/watch?v=x8jhxstnwY8&t=9s');
   };
 
   const getThemeLabel = (mode: ThemeMode) => {
