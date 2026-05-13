@@ -43,6 +43,13 @@ interface TaskEntry {
   isRefining?: boolean;
 }
 
+const HELP_IMAGES: Record<string, any> = {
+  p1: require('@/assets/images/B1.jpg'),
+  p2: require('@/assets/images/B2.jpg'),
+  p3: require('@/assets/images/B3.jpeg'),
+  p4: require('@/assets/images/B4.jpg'),
+};
+
 export default function HomeScreen() {
   const { colors, mode } = useTheme();
   const { apiKey, hasApiKey } = useSettings();
@@ -57,13 +64,6 @@ export default function HomeScreen() {
   } = useHistory();
   const insets = useSafeAreaInsets();
 
-  const HELP_IMAGES: Record<string, any> = {
-    p1: require('@/assets/images/B1.jpg'),
-    p2: require('@/assets/images/B2.jpg'),
-    p3: require('@/assets/images/B3.jpeg'),
-    p4: require('@/assets/images/B4.jpg'),
-  };
-
   const PLACEHOLDERS = [
     { id: 'p1', label: t.placeholders.front },
     { id: 'p2', label: t.placeholders.left },
@@ -74,7 +74,7 @@ export default function HomeScreen() {
   const [images, setImages] = useState<(SelectedImage | null)[]>([null, null, null, null]);
   const [tasks, setTasks] = useState<TaskEntry[]>([]);
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
-  const [hoveredHelpId, setHoveredHelpId] = useState<string | null>(null);
+  const [activeHelpImage, setActiveHelpImage] = useState<any>(null);
   const pollIntervals = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const buttonScale = useRef(new Animated.Value(1)).current;
 
@@ -319,21 +319,13 @@ export default function HomeScreen() {
             <View key={PLACEHOLDERS[idx].id} style={[styles.imageCard, { backgroundColor: colors.card, borderColor: isRainbow ? getRainbowColor(idx) : colors.cardBorder, borderWidth: isRainbow ? 2 : 1 }]}>
               <TouchableOpacity
                 style={[styles.helpBadge, { backgroundColor: colors.card + 'CC' }]}
-                onPressIn={() => setHoveredHelpId(PLACEHOLDERS[idx].id)}
-                onPressOut={() => setHoveredHelpId(null)}
-                activeOpacity={0.7}
+                onPressIn={() => setActiveHelpImage(HELP_IMAGES[PLACEHOLDERS[idx].id])}
+                onPressOut={() => setActiveHelpImage(null)}
+                delayLongPress={100}
+                activeOpacity={0.6}
               >
                 <HelpCircle size={16} color={colors.textSecondary} />
               </TouchableOpacity>
-
-              {hoveredHelpId === PLACEHOLDERS[idx].id && (
-                <View style={styles.hoverOverlay} pointerEvents="none">
-                  <Image source={HELP_IMAGES[PLACEHOLDERS[idx].id]} style={styles.hoverImage} contentFit="cover" />
-                  <View style={styles.hoverLabel}>
-                    <Text style={styles.hoverLabelText}>{t.help}</Text>
-                  </View>
-                </View>
-              )}
 
               {img ? (
                 <>
@@ -392,6 +384,15 @@ export default function HomeScreen() {
           </View>
         )}
       </ScrollView>
+
+      {activeHelpImage && (
+        <View style={[StyleSheet.absoluteFill, styles.globalHelpOverlay]} pointerEvents="none">
+          <View style={[styles.globalHelpCard, { backgroundColor: colors.card }]}>
+            <Image source={activeHelpImage} style={styles.globalHelpImage} contentFit="contain" />
+            <Text style={[styles.globalHelpText, { color: colors.textSecondary }]}>{t.help}</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -439,30 +440,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(150,150,150,0.2)',
   },
-  hoverOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000',
-    zIndex: 25,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  hoverImage: {
-    width: '100%',
-    height: '100%',
-    opacity: 0.9,
-  },
-  hoverLabel: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingVertical: 4,
+  globalHelpOverlay: {
+    zIndex: 100,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  hoverLabelText: {
-    color: '#FFF',
-    fontSize: 12,
+  globalHelpCard: {
+    width: '80%',
+    aspectRatio: 1,
+    borderRadius: 24,
+    padding: 16,
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  globalHelpImage: {
+    flex: 1,
+    width: '100%',
+    borderRadius: 12,
+  },
+  globalHelpText: {
+    fontSize: 14,
     fontWeight: '700',
   },
   createButton: { height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 },
