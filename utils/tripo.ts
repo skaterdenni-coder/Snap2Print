@@ -17,13 +17,78 @@ export interface TripoTask {
   [key: string]: any;
 }
 
-async function safeParseJson(response: Response) {
+export class TripoApiError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public isRetryable: boolean = false
+  ) {
+    super(message);
+    this.name = 'TripoApiError';
+  }
+}
+
+async function safeParseJson(response: Response): Promise<any> {
   const contentType = response.headers.get('content-type');
+  const status = response.status;
+
+  // Handle server errors (502, 503, 504)
+  if (status >= 502 && status <= 504) {
+    throw new TripoApiError(
+      `Tripo-Server vorübergehend nicht verfügbar (${status}). Bitte später erneut versuchen.`,
+      status,
+      true // Retryable
+    );
+  }
+
+  // Handle rate limiting
+  if (status === 429) {
+    throw new TripoApiError(
+      'Zu viele Anfragen. Bitte kurz warten.',
+      status,
+      true // Retryable
+    );
+  }
+
+  // Handle auth errors
+  if (status === 401 || status === 403) {
+    throw new TripoApiError(
+      'Ungültiger API-Key oder keine Berechtigung.',
+      status,
+      false
+    );
+  }
+
+  // Check for JSON response
   if (!contentType || !contentType.includes('application/json')) {
     const text = await response.text();
-    throw new Error(`API Fehler (${response.status}): Server antwortete nicht im JSON-Format.`);
+    // Check if it's an HTML error page (common for cloud providers)
+    if (text.toLowerCase().includes('<!doctype') || text.toLowerCase().includes('<html')) {
+      throw new TripoApiError(
+        `Server-Fehler (${status}): Dienst kurzzeitig nicht verfügbar.`,
+        status,
+        true
+      );
+    }
+    throw new TripoApiError(
+      `Unerwartete Server-Antwort (${status}): ${text.substring(0, 100)}`,
+      status,
+      false
+    );
   }
-  return await response.json();
+
+  const data = await response.json();
+
+  // Check for API-level errors from Tripo
+  if (data.code !== 0) {
+    throw new TripoApiError(
+      data.message || `API-Fehler (${data.code})`,
+      status,
+      data.code === 429
+    );
+  }
+
+  return data;
 }
 
 async function uploadToTripo(apiKey: string, uri: string): Promise<string> {

@@ -10,18 +10,21 @@ import {
   ActivityIndicator,
   Platform,
   Share,
+  TextInput,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImagePlus, X, Sparkles, Box, Clock, CheckCircle, AlertCircle, Loader, Share2 } from 'lucide-react-native';
 import { useMutation } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
-import { createTripoTask, getTripoTaskStatus, mapTripoStatus, createTripoRefineTask, imageUriToBase64DataUrl } from '@/utils/tripo';
+import { createTripoTask, getTripoTaskStatus, mapTripoStatus, createTripoRefineTask, imageUriToBase64DataUrl, TripoApiError } from '@/utils/tripo';
 import { rainbowGradient } from '@/constants/colors';
 import { useHistory } from '@/contexts/HistoryContext';
+import { resizeGLB, resizeGLBToBytes } from '@/utils/modelResizer';
 
 interface SelectedImage {
   uri: string;
@@ -37,6 +40,7 @@ interface TaskEntry {
   progress: number;
   thumbnailUrl?: string;
   modelUrls?: { glb?: string };
+  modelHeightMeters?: number;
   createdAt: string;
   isRefining?: boolean;
 }
@@ -47,6 +51,13 @@ const PLACEHOLDERS = [
   { id: 'p3', label: 'Rechts' },
   { id: 'p4', label: 'Hinten' },
 ];
+
+function parseModelHeightMeters(value: string): number | undefined {
+  const normalized = value.trim().replace(',', '.');
+  if (!normalized) return undefined;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
 
 export default function HomeScreen() {
   const { colors, mode } = useTheme();
@@ -62,6 +73,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
 
   const [images, setImages] = useState<(SelectedImage | null)[]>([null, null, null, null]);
+  const [modelHeightInput, setModelHeightInput] = useState<string>('');
   const [tasks, setTasks] = useState<TaskEntry[]>([]);
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
   const pollIntervals = useRef<Record<string, ReturnType<typeof setInterval>>>({});
@@ -118,6 +130,7 @@ export default function HomeScreen() {
           const minutes = now.getMinutes().toString().padStart(2, '0');
           const timestampName = `${day}.${month}. ${hours}:${minutes}`;
           const finalName = tripoName ? `${tripoName.charAt(0).toUpperCase() + tripoName.slice(1)}` : `Modell ${timestampName}`;
+          const completedTask = tasksRef.current.find((task) => task.taskId === taskId);
 
           addEntry({
             id: `${Date.now()}`,
@@ -126,6 +139,7 @@ export default function HomeScreen() {
             baseTaskId: isRefining ? baseTaskId : undefined,
             thumbnailUrl: currentThumb,
             modelUrls: currentModel,
+            modelHeightMeters: completedTask?.modelHeightMeters,
             createdAt: new Date().toISOString(),
             completedAt: new Date().toISOString(),
           });
@@ -141,6 +155,11 @@ export default function HomeScreen() {
           if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
       } catch (error: any) {
+        // Bei vorübergehenden Fehlern (502, 503, 504) weitermachen
+        if (error instanceof TripoApiError && error.isRetryable) {
+          console.warn(`[Tripo] Server vorübergehend unavailable (${error.statusCode}), versuche weiter...`);
+          return;
+        }
         console.error('[Tripo] Poll Fehler:', error);
       }
     }, 4000);
@@ -161,7 +180,8 @@ export default function HomeScreen() {
             createdAt: at.createdAt,
             isRefining: at.isRefining,
             thumbnailUrl: at.thumbnailUrl,
-            modelUrls: at.modelUrls
+            modelUrls: at.modelUrls,
+            modelHeightMeters: at.modelHeightMeters
           }));
         return [...prev, ...resumedTasks];
       });
@@ -208,6 +228,8 @@ export default function HomeScreen() {
     mutationFn: async () => {
       const imageUris = images.map(img => img?.uri || null);
       if (imageUris.filter(u => u !== null).length < 1) throw new Error('Mindestens 1 Bild nötig.');
+      const modelHeightMeters = parseModelHeightMeters(modelHeightInput);
+      if (modelHeightInput.trim() && !modelHeightMeters) throw new Error('Bitte gib eine gültige Modellhöhe in Metern ein.');
       return await createTripoTask(apiKey, imageUris);
     },
     onSuccess: ({ taskId, tokens }) => {
@@ -217,6 +239,7 @@ export default function HomeScreen() {
         tokens,
         status: 'PENDING',
         progress: 0,
+        modelHeightMeters: parseModelHeightMeters(modelHeightInput),
         createdAt: new Date().toISOString()
       };
 
@@ -225,15 +248,35 @@ export default function HomeScreen() {
         taskId: entry.taskId,
         createdAt: entry.createdAt,
         progress: 0,
-        status: 'PENDING'
+        status: 'PENDING',
+        modelHeightMeters: entry.modelHeightMeters
       });
 
       setTasks((prev) => [entry, ...prev]);
       setImages([null, null, null, null]);
+      setModelHeightInput('');
       startPolling(taskId);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: (error: Error) => Alert.alert('Fehler', error.message),
+    onError: (error: Error) => {
+      let title = 'Fehler';
+      let message = error.message;
+
+      if (error instanceof TripoApiError) {
+        if (error.statusCode === 502 || error.statusCode === 503 || error.statusCode === 504) {
+          title = 'Server nicht verfügbar';
+          message = 'Der Tripo-Server ist vorübergehend nicht erreichbar. Bitte versuche es in ein paar Minuten erneut.';
+        } else if (error.statusCode === 429) {
+          title = 'Zu viele Anfragen';
+          message = 'Bitte warte einen Moment, bevor du einen neuen Versuch startest.';
+        } else if (error.statusCode === 401 || error.statusCode === 403) {
+          title = 'Authentifizierungsfehler';
+          message = 'Dein API-Key ist ungültig oder abgelaufen. Bitte überprüfe ihn in den Einstellungen.';
+        }
+      }
+
+      Alert.alert(title, message);
+    },
   });
 
   const handleCreate = useCallback(() => {
@@ -266,20 +309,66 @@ export default function HomeScreen() {
     }
   }, [createTaskMutation, buttonScale, images]);
 
-  const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string) => {
+  const bytesToBase64 = useCallback((bytes: Uint8Array): string => {
+    let binary = '';
+    const chunkSize = 0x8000;
+
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      const chunk = bytes.subarray(offset, offset + chunkSize);
+      binary += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+
+    return btoa(binary);
+  }, []);
+
+  const createLocalGlbFileAsync = useCallback(async (
+    url: string,
+    targetHeightMeters: number
+  ): Promise<string> => {
+    if (!FileSystem.cacheDirectory) {
+      throw new Error('Cache-Verzeichnis nicht verfügbar.');
+    }
+
+    const bytes = await resizeGLBToBytes(url, targetHeightMeters);
+    const base64 = bytesToBase64(bytes);
+    const safeHeight = String(targetHeightMeters).replace(/[^0-9.]/g, '_');
+    const fileUri = `${FileSystem.cacheDirectory}model-${Date.now()}-${safeHeight}m.glb`;
+
+    await FileSystem.writeAsStringAsync(fileUri, base64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    return fileUri;
+  }, [bytesToBase64]);
+
+  const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string, targetHeightMeters?: number) => {
     setUploadingTaskId(taskId);
     try {
       const formData = new FormData();
       formData.append('reqtype', 'fileupload');
       formData.append('time', '24h');
-      // @ts-ignore
-      formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
+      if (targetHeightMeters && Platform.OS === 'web') {
+        const resizedBlob = await resizeGLB(glbUrl, targetHeightMeters);
+        const filename = `model-${targetHeightMeters}m.glb`;
+        formData.append('fileToUpload', new File([resizedBlob], filename, { type: 'model/gltf-binary' }));
+      } else if (targetHeightMeters) {
+        const fileUri = await createLocalGlbFileAsync(glbUrl, targetHeightMeters);
+        // @ts-ignore
+        formData.append('fileToUpload', {
+          uri: fileUri,
+          name: `model-${targetHeightMeters}m.glb`,
+          type: 'model/gltf-binary',
+        });
+      } else {
+        // @ts-ignore
+        formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
+      }
       const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
       const litterboxUrl = await uploadRes.text();
       const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl.trim())}`;
       await Share.share({ message: `Schau dir mein 3D-Modell in AR an: ${viewerUrl}`, url: viewerUrl, title: 'AR Modell teilen' });
     } catch (e) { Alert.alert('Fehler', 'Upload fehlgeschlagen'); } finally { setUploadingTaskId(null); }
-  }, []);
+  }, [createLocalGlbFileAsync]);
 
   const getRainbowColor = (index: number) => rainbowGradient[index % rainbowGradient.length];
 
@@ -318,6 +407,25 @@ export default function HomeScreen() {
           ))}
         </View>
 
+        <View style={[styles.scaleCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <Text style={[styles.scaleLabel, { color: colors.text }]}>Modellhöhe ab Boden</Text>
+          <View style={styles.scaleInputRow}>
+            <TextInput
+              style={[styles.scaleInput, { color: colors.text, backgroundColor: colors.inputBackground, borderColor: colors.cardBorder }]}
+              value={modelHeightInput}
+              onChangeText={setModelHeightInput}
+              placeholder="z. B. 1,85"
+              placeholderTextColor={colors.textTertiary}
+              keyboardType="decimal-pad"
+              inputMode="decimal"
+            />
+            <Text style={[styles.scaleUnit, { color: colors.textSecondary }]}>m</Text>
+          </View>
+          <Text style={[styles.scaleHint, { color: colors.textTertiary }]}>
+            Die Tripo-Datei wird einheitlich auf diese reale Höhe skaliert.
+          </Text>
+        </View>
+
         <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
           <TouchableOpacity
             style={[styles.createButton, { backgroundColor: isRainbow ? getRainbowColor(4) : colors.accent, opacity: images.every(img => img === null) || !hasApiKey || createTaskMutation.isPending ? 0.5 : 1 }]}
@@ -347,7 +455,8 @@ export default function HomeScreen() {
                 </View>
                 {task.status === 'SUCCEEDED' && task.modelUrls && (
                   <View style={styles.downloadLinks}>
-                    {task.modelUrls.glb && <TouchableOpacity style={[styles.shareChip, { backgroundColor: colors.success + '15', borderColor: colors.success + '30' }]} onPress={() => task.modelUrls?.glb && shareToLitterboxAndAR(task.id, task.modelUrls.glb)} disabled={uploadingTaskId === task.id}>{uploadingTaskId === task.id ? <ActivityIndicator size="small" color={colors.success} /> : <><Share2 size={12} color={colors.success} /><Text style={[styles.shareChipText, { color: colors.success }]}>AR TEILEN</Text></>}</TouchableOpacity>}
+                    {task.modelHeightMeters && <Text style={[styles.taskScaleText, { color: colors.textSecondary }]}>Höhe: {task.modelHeightMeters} m</Text>}
+                    {task.modelUrls.glb && <TouchableOpacity style={[styles.shareChip, { backgroundColor: colors.success + '15', borderColor: colors.success + '30' }]} onPress={() => task.modelUrls?.glb && shareToLitterboxAndAR(task.id, task.modelUrls.glb, task.modelHeightMeters)} disabled={uploadingTaskId === task.id}>{uploadingTaskId === task.id ? <ActivityIndicator size="small" color={colors.success} /> : <><Share2 size={12} color={colors.success} /><Text style={[styles.shareChipText, { color: colors.success }]}>AR TEILEN</Text></>}</TouchableOpacity>}
                   </View>
                 )}
               </View>
@@ -389,6 +498,12 @@ const styles = StyleSheet.create({
   removeButton: { position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', zIndex: 10 },
   labelBadge: { position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   labelText: { color: '#FFF', fontSize: 10, fontWeight: '700' },
+  scaleCard: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 16 },
+  scaleLabel: { fontSize: 15, fontWeight: '700', marginBottom: 8 },
+  scaleInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  scaleInput: { flex: 1, height: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, fontSize: 16, fontWeight: '600' },
+  scaleUnit: { width: 24, fontSize: 15, fontWeight: '700' },
+  scaleHint: { fontSize: 12, lineHeight: 17, marginTop: 8 },
   createButton: { height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 },
   createButtonText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
   tasksSection: { marginTop: 24 },
@@ -404,6 +519,7 @@ const styles = StyleSheet.create({
   progressBarFill: { height: '100%', borderRadius: 3 },
   progressText: { fontSize: 12, fontWeight: '600', width: 36, textAlign: 'right' },
   downloadLinks: { marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(150,150,150,0.2)' },
+  taskScaleText: { fontSize: 12, fontWeight: '600', marginBottom: 8 },
   shareChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, alignSelf: 'flex-start' },
   shareChipText: { fontSize: 12, fontWeight: '700' },
 });

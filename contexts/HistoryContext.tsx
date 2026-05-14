@@ -17,6 +17,7 @@ export interface HistoryEntry {
     obj?: string;
     usdz?: string;
   };
+  modelHeightMeters?: number;
   createdAt: string;
   completedAt: string;
 }
@@ -31,6 +32,7 @@ export interface ActiveTask {
   status: 'PENDING' | 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED' | 'EXPIRED';
   thumbnailUrl?: string;
   modelUrls?: { glb?: string };
+  modelHeightMeters?: number;
 }
 
 export const [HistoryProvider, useHistory] = createContextHook(() => {
