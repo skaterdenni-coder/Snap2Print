@@ -55,7 +55,8 @@ async function uploadToTripo(apiKey: string, uri: string): Promise<string> {
  */
 export async function createTripoTask(
   apiKey: string,
-  imageUris: (string | null)[]
+  imageUris: (string | null)[],
+  quality: 'fast' | 'detailed' = 'detailed'
 ): Promise<{ taskId: string; tokens: string[] }> {
   const validUris = imageUris.filter((u): u is string => u !== null);
   const isSingleView = validUris.length === 1;
@@ -94,10 +95,10 @@ export async function createTripoTask(
 
   // Parameter hinzufügen
   Object.assign(body, {
-    face_limit: 2000000,
+    face_limit: quality === 'fast' ? 500000 : 2000000,
     texture: true,
     pbr: true,
-    texture_quality: 'detailed',
+    texture_quality: quality === 'fast' ? 'standard' : 'detailed',
     geometry_quality: 'standard',
     texture_alignment: 'original_image',
     orientation: 'align_image',
@@ -126,13 +127,14 @@ export async function createTripoTask(
 export async function createTripoRefineTask(
   apiKey: string,
   draftTaskId: string,
-  imageTokens: string[]
+  imageTokens: string[],
+  quality: 'fast' | 'detailed' = 'detailed'
 ): Promise<string> {
   console.log('[Tripo] Starte Refine Task (v3.0) mit Bild-Referenzen');
 
   const body = {
     type: 'texture_model',
-    model_version: 'v3.0-20250812',
+    model_version: quality === 'fast' ? 'v3.0-20250812' : 'v3.0-20250812', // Gleiche Version, andere Parameter
     original_model_task_id: draftTaskId,
     texture_prompt: {
       // WICHTIG: Die Bilder-Tokens sorgen für das scharfe Kennzeichen
@@ -145,7 +147,7 @@ export async function createTripoRefineTask(
     },
     texture: true,
     pbr: true,
-    texture_quality: 'detailed', // 4K Upscale
+    texture_quality: quality === 'fast' ? 'standard' : 'detailed', // 4K Upscale nur bei detailed
     texture_alignment: 'original_image',
     bake: true
   };

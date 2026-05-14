@@ -2,16 +2,24 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useEffect, useState, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
 
-const API_KEY_STORAGE = 'tripo_api_key'; // Geändert von meshy_api_key
+const API_KEY_STORAGE = 'tripo_api_key';
+const QUALITY_MODE_STORAGE = 'quality_mode';
+
+export type QualityMode = 'fast' | 'detailed';
 
 export const [SettingsProvider, useSettings] = createContextHook(() => {
   const [apiKey, setApiKeyState] = useState<string>('');
+  const [qualityMode, setQualityModeState] = useState<QualityMode>('detailed');
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
 
   useEffect(() => {
-    SecureStore.getItemAsync(API_KEY_STORAGE).then((stored) => {
-      if (stored) {
-        setApiKeyState(stored);
+    Promise.all([
+      SecureStore.getItemAsync(API_KEY_STORAGE),
+      SecureStore.getItemAsync(QUALITY_MODE_STORAGE)
+    ]).then(([storedKey, storedMode]) => {
+      if (storedKey) setApiKeyState(storedKey);
+      if (storedMode === 'fast' || storedMode === 'detailed') {
+        setQualityModeState(storedMode);
       }
       setIsLoaded(true);
     });
@@ -26,7 +34,12 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
     }
   }, []);
 
+  const setQualityMode = useCallback((mode: QualityMode) => {
+    setQualityModeState(mode);
+    SecureStore.setItemAsync(QUALITY_MODE_STORAGE, mode);
+  }, []);
+
   const hasApiKey = apiKey.length > 0;
 
-  return { apiKey, setApiKey, hasApiKey, isLoaded };
+  return { apiKey, setApiKey, hasApiKey, qualityMode, setQualityMode, isLoaded };
 });

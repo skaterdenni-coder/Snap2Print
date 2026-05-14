@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
   Platform,
   Share,
-  Modal,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -52,7 +51,7 @@ const HELP_IMAGES: Record<string, any> = {
 
 export default function HomeScreen() {
   const { colors, mode } = useTheme();
-  const { apiKey, hasApiKey } = useSettings();
+  const { apiKey, hasApiKey, qualityMode } = useSettings();
   const { t } = useLanguage();
   const {
     addEntry,
@@ -60,7 +59,9 @@ export default function HomeScreen() {
     addActiveTask,
     updateActiveTask,
     removeActiveTask,
-    updateTaskProgress
+    updateTaskProgress,
+    updateEntry,
+    entries,
   } = useHistory();
   const insets = useSafeAreaInsets();
 
@@ -79,6 +80,17 @@ export default function HomeScreen() {
   const buttonScale = useRef(new Animated.Value(1)).current;
 
   const isRainbow = mode === 'rainbow';
+
+  const uploadToLitterbox = useCallback(async (glbUrl: string): Promise<string> => {
+    const formData = new FormData();
+    formData.append('reqtype', 'fileupload');
+    formData.append('time', '24h');
+    // @ts-ignore
+    formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
+    const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
+    const litterboxUrl = (await uploadRes.text()).trim();
+    return `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl)}`;
+  }, []);
 
   // Hilfs-Ref, um in den Intervallen auf die aktuellsten Task-Daten zuzugreifen
   const tasksRef = useRef<TaskEntry[]>([]);
@@ -140,6 +152,14 @@ export default function HomeScreen() {
             createdAt: new Date().toISOString(),
             completedAt: new Date().toISOString(),
           });
+
+          // Hintergrund-Upload für AR starten
+          if (currentModel?.glb) {
+            uploadToLitterbox(currentModel.glb)
+              .then(arUrl => updateEntry(taskId, { arUrl }))
+              .catch(err => console.error('[AR] Background upload failed:', err));
+          }
+
           removeActiveTask(taskId);
           setTasks(prev => prev.filter(t => t.taskId !== taskId));
 
@@ -219,7 +239,7 @@ export default function HomeScreen() {
     mutationFn: async () => {
       const imageUris = images.map(img => img?.uri || null);
       if (imageUris.filter(u => u !== null).length < 1) throw new Error(t.minOneImage);
-      return await createTripoTask(apiKey, imageUris);
+      return await createTripoTask(apiKey, imageUris, qualityMode);
     },
     onSuccess: ({ taskId, tokens }) => {
       const entry: TaskEntry = {
@@ -278,19 +298,25 @@ export default function HomeScreen() {
   }, [createTaskMutation, buttonScale, images, t]);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string) => {
+    // 1. Prüfen, ob wir die URL schon in der History haben
+    const existingEntry = entries.find(e => e.taskId === taskId);
+    if (existingEntry?.arUrl) {
+      await Share.share({ message: `Check out my 3D model in AR: ${existingEntry.arUrl}`, url: existingEntry.arUrl, title: 'Share AR Model' });
+      return;
+    }
+
+    // 2. Falls nicht, Upload starten/anzeigen
     setUploadingTaskId(taskId);
     try {
-      const formData = new FormData();
-      formData.append('reqtype', 'fileupload');
-      formData.append('time', '24h');
-      // @ts-ignore
-      formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
-      const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
-      const litterboxUrl = await uploadRes.text();
-      const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl.trim())}`;
+      const viewerUrl = await uploadToLitterbox(glbUrl);
+      updateEntry(taskId, { arUrl: viewerUrl });
       await Share.share({ message: `Check out my 3D model in AR: ${viewerUrl}`, url: viewerUrl, title: 'Share AR Model' });
-    } catch (e) { Alert.alert(t.error, t.uploadFailed); } finally { setUploadingTaskId(null); }
-  }, [t]);
+    } catch (e) {
+      Alert.alert(t.error, t.uploadFailed);
+    } finally {
+      setUploadingTaskId(null);
+    }
+  }, [t, entries, uploadToLitterbox, updateEntry]);
 
   const getRainbowColor = (index: number) => rainbowGradient[index % rainbowGradient.length];
 
@@ -430,7 +456,7 @@ const styles = StyleSheet.create({
   helpBadge: {
     position: 'absolute',
     top: 6,
-    right: 6,
+    left: 6,
     width: 32,
     height: 32,
     borderRadius: 16,
