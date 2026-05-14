@@ -456,7 +456,7 @@ export default function HomeScreen() {
             style={[styles.scaleInput, { color: colors.text, backgroundColor: colors.inputBackground, borderColor: colors.cardBorder }]}
           />
           <Text style={[styles.scaleHint, { color: colors.textSecondary }]}>
-            Optional. Wenn gesetzt, wird die Y-Höhe vom Boden auf diesen Wert skaliert.
+            Optional. Wenn gesetzt, wird die Höhe auf diesen Wert skaliert.
           </Text>
         </View>
 
