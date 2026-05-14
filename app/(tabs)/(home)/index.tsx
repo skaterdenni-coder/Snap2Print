@@ -17,10 +17,11 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ImagePlus, X, Sparkles, Box, Clock, CheckCircle, AlertCircle, Loader, Share2 } from 'lucide-react-native';
+import { ImagePlus, X, Sparkles, Box, Clock, CheckCircle, AlertCircle, Loader, Share2, HelpCircle } from 'lucide-react-native';
 import { useMutation } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { createTripoTask, getTripoTaskStatus, mapTripoStatus, createTripoRefineTask, imageUriToBase64DataUrl, TripoApiError } from '@/utils/tripo';
 import { rainbowGradient } from '@/constants/colors';
 import { useHistory } from '@/contexts/HistoryContext';
@@ -40,46 +41,101 @@ interface TaskEntry {
   progress: number;
   thumbnailUrl?: string;
   modelUrls?: { glb?: string };
-  modelHeightMeters?: number;
   createdAt: string;
   isRefining?: boolean;
+  modelHeightMeters?: number;
 }
 
-const PLACEHOLDERS = [
-  { id: 'p1', label: '45° Vorne' },
-  { id: 'p2', label: 'Links' },
-  { id: 'p3', label: 'Rechts' },
-  { id: 'p4', label: 'Hinten' },
-];
+const HELP_IMAGES: Record<string, any> = {
+  p1: require('../../../assets/images/B1.png'),
+  p2: require('../../../assets/images/B2.png'),
+  p3: require('../../../assets/images/B3.png'),
+  p4: require('../../../assets/images/B4.png'),
+};
 
 function parseModelHeightMeters(value: string): number | undefined {
   const normalized = value.trim().replace(',', '.');
   if (!normalized) return undefined;
   const parsed = Number(normalized);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error('Bitte gib eine gültige Modellhöhe in Metern ein.');
+  }
+  return parsed;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
 
 export default function HomeScreen() {
   const { colors, mode } = useTheme();
-  const { apiKey, hasApiKey } = useSettings();
+  const { apiKey, hasApiKey, qualityMode } = useSettings();
+  const { t } = useLanguage();
   const {
     addEntry,
     activeTasks,
     addActiveTask,
     updateActiveTask,
     removeActiveTask,
-    updateTaskProgress
+    updateTaskProgress,
+    updateEntry,
+    entries,
   } = useHistory();
   const insets = useSafeAreaInsets();
 
+  const PLACEHOLDERS = [
+    { id: 'p1', label: t.placeholders.front },
+    { id: 'p2', label: t.placeholders.left },
+    { id: 'p3', label: t.placeholders.right },
+    { id: 'p4', label: t.placeholders.back },
+  ];
+
   const [images, setImages] = useState<(SelectedImage | null)[]>([null, null, null, null]);
-  const [modelHeightInput, setModelHeightInput] = useState<string>('');
   const [tasks, setTasks] = useState<TaskEntry[]>([]);
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
+  const [activeHelpIdx, setActiveHelpIdx] = useState<number | null>(null);
+  const [modelHeightInput, setModelHeightInput] = useState<string>('');
   const pollIntervals = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const buttonScale = useRef(new Animated.Value(1)).current;
 
   const isRainbow = mode === 'rainbow';
+
+  const createLocalGlbFileAsync = useCallback(async (glbUrl: string, targetHeightMeters: number): Promise<string> => {
+    const bytes = await resizeGLBToBytes(glbUrl, targetHeightMeters);
+    const fileUri = `${FileSystem.cacheDirectory ?? ''}scaled-model-${Date.now()}.glb`;
+    await FileSystem.writeAsStringAsync(fileUri, bytesToBase64(bytes), {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return fileUri;
+  }, []);
+
+  const uploadToLitterbox = useCallback(async (glbUrl: string, targetHeightMeters?: number): Promise<string> => {
+    const formData = new FormData();
+    formData.append('reqtype', 'fileupload');
+    formData.append('time', '24h');
+
+    if (targetHeightMeters) {
+      if (Platform.OS === 'web') {
+        const resizedBlob = await resizeGLB(glbUrl, targetHeightMeters);
+        formData.append('fileToUpload', new File([resizedBlob], 'model.glb', { type: 'model/gltf-binary' }));
+      } else {
+        const fileUri = await createLocalGlbFileAsync(glbUrl, targetHeightMeters);
+        // @ts-ignore React Native accepts file descriptors in FormData.
+        formData.append('fileToUpload', { uri: fileUri, name: 'model.glb', type: 'model/gltf-binary' });
+      }
+    } else {
+      // @ts-ignore React Native accepts file descriptors in FormData.
+      formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
+    }
+
+    const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
+    const litterboxUrl = (await uploadRes.text()).trim();
+    return `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl)}`;
+  }, [createLocalGlbFileAsync]);
 
   // Hilfs-Ref, um in den Intervallen auf die aktuellsten Task-Daten zuzugreifen
   const tasksRef = useRef<TaskEntry[]>([]);
@@ -120,6 +176,7 @@ export default function HomeScreen() {
         if (mappedStatus === 'SUCCEEDED') {
           clearInterval(interval);
           delete pollIntervals.current[taskId];
+          const completedTask = tasksRef.current.find(t => t.taskId === taskId);
 
           // Versuchen einen Namen aus Tripo-Tags oder Prompt zu extrahieren (falls vorhanden)
           const tripoName = tripoData.input?.prompt || tripoData.output?.label || tripoData.output?.tag;
@@ -129,8 +186,7 @@ export default function HomeScreen() {
           const hours = now.getHours().toString().padStart(2, '0');
           const minutes = now.getMinutes().toString().padStart(2, '0');
           const timestampName = `${day}.${month}. ${hours}:${minutes}`;
-          const finalName = tripoName ? `${tripoName.charAt(0).toUpperCase() + tripoName.slice(1)}` : `Modell ${timestampName}`;
-          const completedTask = tasksRef.current.find((task) => task.taskId === taskId);
+          const finalName = tripoName ? `${tripoName.charAt(0).toUpperCase() + tripoName.slice(1)}` : `${t.model} ${timestampName}`;
 
           addEntry({
             id: `${Date.now()}`,
@@ -143,6 +199,14 @@ export default function HomeScreen() {
             createdAt: new Date().toISOString(),
             completedAt: new Date().toISOString(),
           });
+
+          // Hintergrund-Upload für AR starten
+          if (currentModel?.glb) {
+            uploadToLitterbox(currentModel.glb, completedTask?.modelHeightMeters)
+              .then(arUrl => updateEntry(taskId, { arUrl }))
+              .catch(err => console.error('[AR] Background upload failed:', err));
+          }
+
           removeActiveTask(taskId);
           setTasks(prev => prev.filter(t => t.taskId !== taskId));
 
@@ -155,16 +219,11 @@ export default function HomeScreen() {
           if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
       } catch (error: any) {
-        // Bei vorübergehenden Fehlern (502, 503, 504) weitermachen
-        if (error instanceof TripoApiError && error.isRetryable) {
-          console.warn(`[Tripo] Server vorübergehend unavailable (${error.statusCode}), versuche weiter...`);
-          return;
-        }
         console.error('[Tripo] Poll Fehler:', error);
       }
     }, 4000);
     pollIntervals.current[taskId] = interval;
-  }, [apiKey, addEntry, updateTaskProgress, updateActiveTask, removeActiveTask]);
+  }, [apiKey, addEntry, updateTaskProgress, updateActiveTask, removeActiveTask, uploadToLitterbox, updateEntry, t.model]);
 
   useEffect(() => {
     if (hasApiKey && apiKey && activeTasks.length > 0) {
@@ -181,7 +240,7 @@ export default function HomeScreen() {
             isRefining: at.isRefining,
             thumbnailUrl: at.thumbnailUrl,
             modelUrls: at.modelUrls,
-            modelHeightMeters: at.modelHeightMeters
+            modelHeightMeters: at.modelHeightMeters,
           }));
         return [...prev, ...resumedTasks];
       });
@@ -215,7 +274,7 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('ImagePicker Error:', error);
     }
-  }, [images]);
+  }, [images, PLACEHOLDERS]);
 
   const removeImage = useCallback((index: number) => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -227,20 +286,20 @@ export default function HomeScreen() {
   const createTaskMutation = useMutation({
     mutationFn: async () => {
       const imageUris = images.map(img => img?.uri || null);
-      if (imageUris.filter(u => u !== null).length < 1) throw new Error('Mindestens 1 Bild nötig.');
+      if (imageUris.filter(u => u !== null).length < 1) throw new Error(t.minOneImage);
       const modelHeightMeters = parseModelHeightMeters(modelHeightInput);
-      if (modelHeightInput.trim() && !modelHeightMeters) throw new Error('Bitte gib eine gültige Modellhöhe in Metern ein.');
-      return await createTripoTask(apiKey, imageUris);
+      const result = await createTripoTask(apiKey, imageUris, qualityMode);
+      return { ...result, modelHeightMeters };
     },
-    onSuccess: ({ taskId, tokens }) => {
+    onSuccess: ({ taskId, tokens, modelHeightMeters }) => {
       const entry: TaskEntry = {
         id: `${Date.now()}`,
         taskId,
         tokens,
         status: 'PENDING',
         progress: 0,
-        modelHeightMeters: parseModelHeightMeters(modelHeightInput),
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        modelHeightMeters,
       };
 
       addActiveTask({
@@ -249,7 +308,7 @@ export default function HomeScreen() {
         createdAt: entry.createdAt,
         progress: 0,
         status: 'PENDING',
-        modelHeightMeters: entry.modelHeightMeters
+        modelHeightMeters,
       });
 
       setTasks((prev) => [entry, ...prev]);
@@ -259,23 +318,11 @@ export default function HomeScreen() {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
     onError: (error: Error) => {
-      let title = 'Fehler';
-      let message = error.message;
-
-      if (error instanceof TripoApiError) {
-        if (error.statusCode === 502 || error.statusCode === 503 || error.statusCode === 504) {
-          title = 'Server nicht verfügbar';
-          message = 'Der Tripo-Server ist vorübergehend nicht erreichbar. Bitte versuche es in ein paar Minuten erneut.';
-        } else if (error.statusCode === 429) {
-          title = 'Zu viele Anfragen';
-          message = 'Bitte warte einen Moment, bevor du einen neuen Versuch startest.';
-        } else if (error.statusCode === 401 || error.statusCode === 403) {
-          title = 'Authentifizierungsfehler';
-          message = 'Dein API-Key ist ungültig oder abgelaufen. Bitte überprüfe ihn in den Einstellungen.';
-        }
+      if (error instanceof TripoApiError && error.isRetryable) {
+        Alert.alert(t.error, `${error.message}\n\nBitte versuche es gleich noch einmal.`);
+        return;
       }
-
-      Alert.alert(title, message);
+      Alert.alert(t.error, error.message);
     },
   });
 
@@ -284,12 +331,12 @@ export default function HomeScreen() {
 
     if (activeImageCount === 1) {
       Alert.alert(
-        'Single-View Modus',
-        'Du hast nur ein Bild ausgewählt. Das 3D-Modell wird erstellt, aber das Ergebnis ist mit nur einer Ansicht oft weniger präzise als mit mehreren Bildern. Fortfahren?',
+        t.singleViewTitle,
+        t.singleViewDesc,
         [
-          { text: 'Abbrechen', style: 'cancel' },
+          { text: t.cancel, style: 'cancel' },
           {
-            text: 'Erstellen',
+            text: t.create,
             onPress: () => {
               Animated.sequence([
                 Animated.timing(buttonScale, { toValue: 0.95, duration: 80, useNativeDriver: true }),
@@ -307,70 +354,38 @@ export default function HomeScreen() {
       ]).start();
       createTaskMutation.mutate();
     }
-  }, [createTaskMutation, buttonScale, images]);
-
-  const bytesToBase64 = useCallback((bytes: Uint8Array): string => {
-    let binary = '';
-    const chunkSize = 0x8000;
-
-    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-      const chunk = bytes.subarray(offset, offset + chunkSize);
-      binary += String.fromCharCode.apply(null, Array.from(chunk));
-    }
-
-    return btoa(binary);
-  }, []);
-
-  const createLocalGlbFileAsync = useCallback(async (
-    url: string,
-    targetHeightMeters: number
-  ): Promise<string> => {
-    if (!FileSystem.cacheDirectory) {
-      throw new Error('Cache-Verzeichnis nicht verfügbar.');
-    }
-
-    const bytes = await resizeGLBToBytes(url, targetHeightMeters);
-    const base64 = bytesToBase64(bytes);
-    const safeHeight = String(targetHeightMeters).replace(/[^0-9.]/g, '_');
-    const fileUri = `${FileSystem.cacheDirectory}model-${Date.now()}-${safeHeight}m.glb`;
-
-    await FileSystem.writeAsStringAsync(fileUri, base64, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-
-    return fileUri;
-  }, [bytesToBase64]);
+  }, [createTaskMutation, buttonScale, images, t]);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string, targetHeightMeters?: number) => {
+    // 1. Prüfen, ob wir die URL schon in der History haben
+    const existingEntry = entries.find(e => e.taskId === taskId);
+    if (existingEntry?.arUrl) {
+      await Share.share({ message: `Check out my 3D model in AR: ${existingEntry.arUrl}`, url: existingEntry.arUrl, title: 'Share AR Model' });
+      return;
+    }
+
+    // 2. Falls nicht, Upload starten/anzeigen
     setUploadingTaskId(taskId);
     try {
-      const formData = new FormData();
-      formData.append('reqtype', 'fileupload');
-      formData.append('time', '24h');
-      if (targetHeightMeters && Platform.OS === 'web') {
-        const resizedBlob = await resizeGLB(glbUrl, targetHeightMeters);
-        const filename = `model-${targetHeightMeters}m.glb`;
-        formData.append('fileToUpload', new File([resizedBlob], filename, { type: 'model/gltf-binary' }));
-      } else if (targetHeightMeters) {
-        const fileUri = await createLocalGlbFileAsync(glbUrl, targetHeightMeters);
-        // @ts-ignore
-        formData.append('fileToUpload', {
-          uri: fileUri,
-          name: `model-${targetHeightMeters}m.glb`,
-          type: 'model/gltf-binary',
-        });
-      } else {
-        // @ts-ignore
-        formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
-      }
-      const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
-      const litterboxUrl = await uploadRes.text();
-      const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl.trim())}`;
-      await Share.share({ message: `Schau dir mein 3D-Modell in AR an: ${viewerUrl}`, url: viewerUrl, title: 'AR Modell teilen' });
-    } catch (e) { Alert.alert('Fehler', 'Upload fehlgeschlagen'); } finally { setUploadingTaskId(null); }
-  }, [createLocalGlbFileAsync]);
+      const viewerUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? existingEntry?.modelHeightMeters);
+      updateEntry(taskId, { arUrl: viewerUrl });
+      await Share.share({ message: `Check out my 3D model in AR: ${viewerUrl}`, url: viewerUrl, title: 'Share AR Model' });
+    } catch (e) {
+      Alert.alert(t.error, t.uploadFailed);
+    } finally {
+      setUploadingTaskId(null);
+    }
+  }, [t, entries, uploadToLitterbox, updateEntry]);
 
   const getRainbowColor = (index: number) => rainbowGradient[index % rainbowGradient.length];
+
+  const getStatusLabel = (status: string) => {
+    if (status === 'PENDING') return t.status.pending;
+    if (status === 'IN_PROGRESS') return t.status.progress;
+    if (status === 'SUCCEEDED') return t.status.success;
+    if (status === 'FAILED') return t.status.failed;
+    return t.status.expired;
+  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -381,48 +396,67 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Bilder auswählen</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.selectImages}</Text>
         </View>
 
         <View style={styles.imageGrid}>
-          {images.map((img, idx) => (
-            <View key={PLACEHOLDERS[idx].id} style={[styles.imageCard, { backgroundColor: colors.card, borderColor: isRainbow ? getRainbowColor(idx) : colors.cardBorder, borderWidth: isRainbow ? 2 : 1 }]}>
-              {img ? (
-                <>
-                  <Image source={{ uri: img.uri }} style={styles.imagePreview} contentFit="cover" />
-                  <TouchableOpacity style={[styles.removeButton, { backgroundColor: colors.danger }]} onPress={() => removeImage(idx)}>
-                    <X size={14} color="#FFF" />
-                  </TouchableOpacity>
-                  <View style={styles.labelBadge}><Text style={styles.labelText}>{img.label}</Text></View>
-                </>
-              ) : (
-                <TouchableOpacity style={styles.addImagePlaceholder} onPress={() => pickImage(idx)}>
-                   <View style={[styles.addIconCircle, { backgroundColor: (isRainbow ? getRainbowColor(idx) : colors.accent) + '10' }]}>
-                    <ImagePlus size={24} color={isRainbow ? getRainbowColor(idx) : colors.accent} />
+          {images.map((img, idx) => {
+            const isShowingHelp = activeHelpIdx === idx;
+            return (
+              <View key={PLACEHOLDERS[idx].id} style={[styles.imageCard, { backgroundColor: colors.card, borderColor: isRainbow ? getRainbowColor(idx) : colors.cardBorder, borderWidth: isRainbow ? 2 : 1 }]}>
+                {isShowingHelp ? (
+                  <View style={styles.imagePreview}>
+                    <Image source={HELP_IMAGES[PLACEHOLDERS[idx].id]} style={StyleSheet.absoluteFill} contentFit="cover" />
+                    <View style={styles.helpOverlayLabel}>
+                      <Text style={styles.helpOverlayText}>{t.help}</Text>
+                    </View>
                   </View>
-                  <Text style={[styles.addImageText, { color: colors.textSecondary }]}>{PLACEHOLDERS[idx].label}</Text>
+                ) : img ? (
+                  <>
+                    <Image source={{ uri: img.uri }} style={styles.imagePreview} contentFit="cover" />
+                    <TouchableOpacity style={[styles.removeButton, { backgroundColor: colors.danger }]} onPress={() => removeImage(idx)}>
+                      <X size={14} color="#FFF" />
+                    </TouchableOpacity>
+                    <View style={styles.labelBadge}><Text style={styles.labelText}>{img.label}</Text></View>
+                  </>
+                ) : (
+                  <TouchableOpacity style={styles.addImagePlaceholder} onPress={() => pickImage(idx)}>
+                    <View style={[styles.addIconCircle, { backgroundColor: (isRainbow ? getRainbowColor(idx) : colors.accent) + '10' }]}>
+                      <ImagePlus size={24} color={isRainbow ? getRainbowColor(idx) : colors.accent} />
+                    </View>
+                    <Text style={[styles.addImageText, { color: colors.textSecondary }]}>{PLACEHOLDERS[idx].label}</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.helpBadge, { backgroundColor: colors.card + 'E6' }]}
+                  onPressIn={() => setActiveHelpIdx(idx)}
+                  onPressOut={() => setActiveHelpIdx(null)}
+                  activeOpacity={0.8}
+                >
+                  <HelpCircle size={18} color={isShowingHelp ? colors.accent : colors.textSecondary} />
                 </TouchableOpacity>
-              )}
-            </View>
-          ))}
+              </View>
+            );
+          })}
         </View>
 
         <View style={[styles.scaleCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
-          <Text style={[styles.scaleLabel, { color: colors.text }]}>Modellhöhe ab Boden</Text>
-          <View style={styles.scaleInputRow}>
-            <TextInput
-              style={[styles.scaleInput, { color: colors.text, backgroundColor: colors.inputBackground, borderColor: colors.cardBorder }]}
-              value={modelHeightInput}
-              onChangeText={setModelHeightInput}
-              placeholder="z. B. 1,85"
-              placeholderTextColor={colors.textTertiary}
-              keyboardType="decimal-pad"
-              inputMode="decimal"
-            />
-            <Text style={[styles.scaleUnit, { color: colors.textSecondary }]}>m</Text>
+          <View style={styles.scaleHeader}>
+            <Text style={[styles.scaleTitle, { color: colors.text }]}>Modellhöhe</Text>
+            <Text style={[styles.scaleUnit, { color: colors.textSecondary }]}>Meter</Text>
           </View>
-          <Text style={[styles.scaleHint, { color: colors.textTertiary }]}>
-            Die Tripo-Datei wird einheitlich auf diese reale Höhe skaliert.
+          <TextInput
+            value={modelHeightInput}
+            onChangeText={setModelHeightInput}
+            placeholder="z. B. 1,85"
+            placeholderTextColor={colors.textTertiary}
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            style={[styles.scaleInput, { color: colors.text, backgroundColor: colors.inputBackground, borderColor: colors.cardBorder }]}
+          />
+          <Text style={[styles.scaleHint, { color: colors.textSecondary }]}>
+            Optional. Wenn gesetzt, wird die Y-Höhe vom Boden auf diesen Wert skaliert.
           </Text>
         </View>
 
@@ -432,13 +466,13 @@ export default function HomeScreen() {
             onPress={handleCreate}
             disabled={images.every(img => img === null) || !hasApiKey || createTaskMutation.isPending}
           >
-            {createTaskMutation.isPending ? <ActivityIndicator color="#FFF" size="small" /> : <><Text style={styles.createButtonText}>3D-Modell erstellen</Text></>}
+            {createTaskMutation.isPending ? <ActivityIndicator color="#FFF" size="small" /> : <><Text style={styles.createButtonText}>{t.createModel}</Text></>}
           </TouchableOpacity>
         </Animated.View>
 
         {tasks.length > 0 && (
           <View style={styles.tasksSection}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Aktive Aufgaben</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.activeTasks}</Text>
             {tasks.map((task, idx) => (
               <View key={task.id} style={[styles.taskCard, { backgroundColor: colors.card, borderColor: isRainbow ? getRainbowColor(idx + 5) : colors.cardBorder, borderWidth: isRainbow ? 2 : 1 }]}>
                 <View style={styles.taskHeader}>
@@ -447,16 +481,20 @@ export default function HomeScreen() {
                     <View style={styles.statusRow}>
                       {getStatusIcon(task.status)}
                       <Text style={[styles.statusText, { color: colors.text }]}>
-                        {task.isRefining ? 'Textur-Optimierung...' : getStatusText(task.status)}
+                        {task.isRefining ? t.textureOptimization : getStatusLabel(task.status)}
                       </Text>
                     </View>
                     {(task.status === 'PENDING' || task.status === 'IN_PROGRESS') && <View style={styles.progressBarContainer}><View style={[styles.progressBarBg, { backgroundColor: colors.inputBackground }]}><View style={[styles.progressBarFill, { width: `${task.progress}%`, backgroundColor: isRainbow ? getRainbowColor(idx + 5) : colors.accent }]} /></View><Text style={[styles.progressText, { color: colors.textSecondary }]}>{task.progress}%</Text></View>}
+                    {task.modelHeightMeters && (
+                      <Text style={[styles.taskScaleText, { color: colors.textSecondary }]}>
+                        Höhe: {task.modelHeightMeters} m
+                      </Text>
+                    )}
                   </View>
                 </View>
                 {task.status === 'SUCCEEDED' && task.modelUrls && (
                   <View style={styles.downloadLinks}>
-                    {task.modelHeightMeters && <Text style={[styles.taskScaleText, { color: colors.textSecondary }]}>Höhe: {task.modelHeightMeters} m</Text>}
-                    {task.modelUrls.glb && <TouchableOpacity style={[styles.shareChip, { backgroundColor: colors.success + '15', borderColor: colors.success + '30' }]} onPress={() => task.modelUrls?.glb && shareToLitterboxAndAR(task.id, task.modelUrls.glb, task.modelHeightMeters)} disabled={uploadingTaskId === task.id}>{uploadingTaskId === task.id ? <ActivityIndicator size="small" color={colors.success} /> : <><Share2 size={12} color={colors.success} /><Text style={[styles.shareChipText, { color: colors.success }]}>AR TEILEN</Text></>}</TouchableOpacity>}
+                    {task.modelUrls.glb && <TouchableOpacity style={[styles.shareChip, { backgroundColor: colors.success + '15', borderColor: colors.success + '30' }]} onPress={() => task.modelUrls?.glb && shareToLitterboxAndAR(task.id, task.modelUrls.glb, task.modelHeightMeters)} disabled={uploadingTaskId === task.id}>{uploadingTaskId === task.id ? <ActivityIndicator size="small" color={colors.success} /> : <><Share2 size={12} color={colors.success} /><Text style={[styles.shareChipText, { color: colors.success }]}>{t.arShare}</Text></>}</TouchableOpacity>}
                   </View>
                 )}
               </View>
@@ -498,12 +536,45 @@ const styles = StyleSheet.create({
   removeButton: { position: 'absolute', top: 8, right: 8, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', zIndex: 10 },
   labelBadge: { position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   labelText: { color: '#FFF', fontSize: 10, fontWeight: '700' },
-  scaleCard: { borderWidth: 1, borderRadius: 16, padding: 14, marginBottom: 16 },
-  scaleLabel: { fontSize: 15, fontWeight: '700', marginBottom: 8 },
-  scaleInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  scaleInput: { flex: 1, height: 44, borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, fontSize: 16, fontWeight: '600' },
-  scaleUnit: { width: 24, fontSize: 15, fontWeight: '700' },
-  scaleHint: { fontSize: 12, lineHeight: 17, marginTop: 8 },
+  helpBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 50,
+    borderWidth: 1,
+    borderColor: 'rgba(150,150,150,0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  helpOverlayLabel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 4,
+    alignItems: 'center',
+  },
+  helpOverlayText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  scaleCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 16, gap: 10 },
+  scaleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  scaleTitle: { fontSize: 15, fontWeight: '700' },
+  scaleUnit: { fontSize: 12, fontWeight: '600' },
+  scaleInput: { height: 46, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, fontSize: 16, fontWeight: '600' },
+  scaleHint: { fontSize: 12, lineHeight: 17 },
   createButton: { height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 },
   createButtonText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
   tasksSection: { marginTop: 24 },
@@ -514,12 +585,12 @@ const styles = StyleSheet.create({
   taskInfo: { flex: 1, gap: 6 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusText: { fontSize: 15, fontWeight: '600' },
+  taskScaleText: { fontSize: 12, fontWeight: '600' },
   progressBarContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   progressBarBg: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
   progressBarFill: { height: '100%', borderRadius: 3 },
   progressText: { fontSize: 12, fontWeight: '600', width: 36, textAlign: 'right' },
   downloadLinks: { marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(150,150,150,0.2)' },
-  taskScaleText: { fontSize: 12, fontWeight: '600', marginBottom: 8 },
   shareChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1, alignSelf: 'flex-start' },
   shareChipText: { fontSize: 12, fontWeight: '700' },
 });

@@ -9,28 +9,36 @@ import {
   Alert,
   Animated,
   Platform,
+  Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield } from 'lucide-react-native';
+import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield, Languages, HelpCircle, Zap, Sparkles } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useSettings } from '@/contexts/SettingsContext';
+import { useSettings, QualityMode } from '@/contexts/SettingsContext';
+import { useLanguage, Language } from '@/contexts/LanguageContext';
 import { ThemeMode, rainbowGradient } from '@/constants/colors';
 
-const THEME_OPTIONS: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [
-  { mode: 'light', label: 'Hell', icon: Sun },
-  { mode: 'dark', label: 'Dunkel', icon: Moon },
-  { mode: 'rainbow', label: 'Regenbogen', icon: Rainbow },
+const THEME_OPTIONS: { mode: ThemeMode; icon: typeof Sun }[] = [
+  { mode: 'light', icon: Sun },
+  { mode: 'dark', icon: Moon },
+  { mode: 'rainbow', icon: Rainbow },
 ];
 
 export default function SettingsScreen() {
   const { colors, mode, setThemeMode } = useTheme();
-  const { apiKey, setApiKey } = useSettings();
+  const { apiKey, setApiKey, qualityMode, setQualityMode } = useSettings();
+  const { language, setLanguage, t } = useLanguage();
   const insets = useSafeAreaInsets();
   const [keyInput, setKeyInput] = useState<string>(apiKey);
   const [showKey, setShowKey] = useState<boolean>(false);
   const [saved, setSaved] = useState<boolean>(false);
+  const [darkClicks, setDarkClicks] = useState<number>(0);
+  const [langSwitches, setLangSwitches] = useState<number>(0);
+  const [lastLang, setLastLang] = useState<Language>(language);
+  const [isRainbowUnlocked, setIsRainbowUnlocked] = useState<boolean>(mode === 'rainbow');
+  const [isQualityUnlocked, setIsQualityUnlocked] = useState<boolean>(false);
   const checkScale = useRef(new Animated.Value(0)).current;
 
   const isRainbow = mode === 'rainbow';
@@ -52,7 +60,51 @@ export default function SettingsScreen() {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
+
+    if (newMode === 'dark') {
+      const nextClicks = darkClicks + 1;
+      setDarkClicks(nextClicks);
+      if (nextClicks >= 5) {
+        setIsRainbowUnlocked(true);
+      }
+    } else {
+      setDarkClicks(0);
+    }
+
     setThemeMode(newMode);
+  };
+
+  const handleLanguageChange = (newLang: Language) => {
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    if (newLang !== lastLang) {
+      const nextSwitches = langSwitches + 1;
+      setLangSwitches(nextSwitches);
+      setLastLang(newLang);
+      if (nextSwitches >= 10) { // 5 mal abwechselnd = 10 Wechsel
+        if (!isQualityUnlocked) {
+          setIsQualityUnlocked(true);
+          if (Platform.OS !== 'web') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          }
+          Alert.alert("Secret Unlocked", "Quality Selector is now available!");
+        }
+      }
+    }
+
+    setLanguage(newLang);
+  };
+
+  const openHelp = () => {
+    Linking.openURL('https://www.youtube.com/watch?v=x8jhxstnwY8&t=9s');
+  };
+
+  const getThemeLabel = (mode: ThemeMode) => {
+    if (mode === 'light') return t.light;
+    if (mode === 'dark') return t.dark;
+    return t.rainbow;
   };
 
   return (
@@ -62,14 +114,22 @@ export default function SettingsScreen() {
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
+        <View style={[styles.header, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
           {isRainbow ? (
             <LinearGradient colors={rainbowGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.titleGradient}>
-              <Text style={[styles.title, { color: '#FFF' }]}>Einstellungen</Text>
+              <Text style={[styles.title, { color: '#FFF' }]}>{t.settingsTitle}</Text>
             </LinearGradient>
           ) : (
-            <Text style={[styles.title, { color: colors.text }]}>Einstellungen</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{t.settingsTitle}</Text>
           )}
+
+          <TouchableOpacity
+            style={[styles.helpButton, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}
+            onPress={openHelp}
+            accessibilityLabel={t.help}
+          >
+            <Text style={[styles.helpText, { color: colors.textSecondary }]}>?</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
@@ -78,7 +138,7 @@ export default function SettingsScreen() {
               <Key size={18} color={colors.accent} />
             </View>
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Tripo API-Key</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.apiKey}</Text>
 
             </View>
           </View>
@@ -120,7 +180,7 @@ export default function SettingsScreen() {
                 <Check size={20} color="#FFF" />
               </Animated.View>
             ) : (
-              <Text style={styles.saveButtonText}>Speichern</Text>
+              <Text style={styles.saveButtonText}>{t.save}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -131,15 +191,15 @@ export default function SettingsScreen() {
               <Sun size={18} color={colors.accent} />
             </View>
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Erscheinungsbild</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.appearance}</Text>
               <Text style={[styles.sectionDescription, { color: colors.textTertiary }]}>
-                Wähle dein bevorzugtes Design
+                {t.appearanceDesc}
               </Text>
             </View>
           </View>
 
           <View style={styles.themeGrid}>
-            {THEME_OPTIONS.map((option) => {
+            {THEME_OPTIONS.filter(opt => opt.mode !== 'rainbow' || isRainbowUnlocked).map((option) => {
               const isActive = mode === option.mode;
               const IconComp = option.icon;
               return (
@@ -188,7 +248,7 @@ export default function SettingsScreen() {
                       { color: isActive ? colors.accent : colors.textSecondary },
                     ]}
                   >
-                    {option.label}
+                    {getThemeLabel(option.mode)}
                   </Text>
                   {isActive && (
                     <View style={[styles.activeIndicator, { backgroundColor: colors.accent }]}>
@@ -201,8 +261,113 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.sectionIconCircle, { backgroundColor: colors.accent + '15' }]}>
+              <Languages size={18} color={colors.accent} />
+            </View>
+            <View>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.language}</Text>
+              <Text style={[styles.sectionDescription, { color: colors.textTertiary }]}>
+                {t.languageDesc}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.themeGrid}>
+            {(['de', 'en'] as const).map((lang) => {
+              const isActive = language === lang;
+              return (
+                <TouchableOpacity
+                  key={lang}
+                  style={[
+                    styles.themeOption,
+                    {
+                      backgroundColor: isActive ? colors.accent + '15' : colors.inputBackground,
+                      borderColor: isActive ? colors.accent : colors.inputBorder,
+                      borderWidth: isActive ? 2 : 1,
+                    },
+                  ]}
+                  onPress={() => handleLanguageChange(lang)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.themeLabel,
+                      { color: isActive ? colors.accent : colors.textSecondary, fontSize: 16 },
+                    ]}
+                  >
+                    {lang === 'de' ? 'Deutsch' : 'English'}
+                  </Text>
+                  {isActive && (
+                    <View style={[styles.activeIndicator, { backgroundColor: colors.accent }]}>
+                      <Check size={10} color="#FFF" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {isQualityUnlocked && (
+          <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <View style={styles.sectionHeader}>
+              <View style={[styles.sectionIconCircle, { backgroundColor: colors.accent + '15' }]}>
+                <Sparkles size={18} color={colors.accent} />
+              </View>
+              <View>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Generation Quality</Text>
+                <Text style={[styles.sectionDescription, { color: colors.textTertiary }]}>
+                  Choose between speed and high fidelity
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.themeGrid}>
+              {(['fast', 'detailed'] as const).map((q) => {
+                const isActive = qualityMode === q;
+                const Icon = q === 'fast' ? Zap : Sparkles;
+                return (
+                  <TouchableOpacity
+                    key={q}
+                    style={[
+                      styles.themeOption,
+                      {
+                        backgroundColor: isActive ? colors.accent + '15' : colors.inputBackground,
+                        borderColor: isActive ? colors.accent : colors.inputBorder,
+                        borderWidth: isActive ? 2 : 1,
+                      },
+                    ]}
+                    onPress={() => {
+                      setQualityMode(q);
+                      if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Icon size={22} color={isActive ? colors.accent : colors.textSecondary} />
+                    <Text
+                      style={[
+                        styles.themeLabel,
+                        { color: isActive ? colors.accent : colors.textSecondary, fontSize: 16 },
+                      ]}
+                    >
+                      {q === 'fast' ? 'Fast' : 'Detailed'}
+                    </Text>
+                    {isActive && (
+                      <View style={[styles.activeIndicator, { backgroundColor: colors.accent }]}>
+                        <Check size={10} color="#FFF" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
         <Text style={[styles.footerText, { color: colors.textTertiary }]}>
-          Powered by Tripo.Ai V3.1.6• App Bachelor 2026
+          created by Dennis Werner 2026 V0.5.5.FS3
         </Text>
       </ScrollView>
     </View>
@@ -231,6 +396,18 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '800' as const,
     letterSpacing: -0.5,
+  },
+  helpButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  helpText: {
+    fontSize: 18,
+    fontWeight: '700' as const,
   },
   sectionCard: {
     borderRadius: 20,

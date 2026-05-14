@@ -17,6 +17,7 @@ export interface HistoryEntry {
     obj?: string;
     usdz?: string;
   };
+  arUrl?: string;
   modelHeightMeters?: number;
   createdAt: string;
   completedAt: string;
@@ -130,6 +131,14 @@ export const [HistoryProvider, useHistory] = createContextHook(() => {
     AsyncStorage.removeItem(HISTORY_STORAGE_KEY);
   }, []);
 
+  const updateEntry = useCallback((taskId: string, newData: Partial<HistoryEntry>) => {
+    setEntries((prev) => {
+      const updated = prev.map((e) => (e.taskId === taskId ? { ...e, ...newData } : e));
+      persistHistory(updated);
+      return updated;
+    });
+  }, [persistHistory]);
+
   return {
     entries,
     activeTasks,
@@ -139,6 +148,7 @@ export const [HistoryProvider, useHistory] = createContextHook(() => {
     removeActiveTask,
     updateTaskProgress,
     removeEntry,
+    updateEntry,
     clearHistory,
     isLoaded
   };

@@ -5,13 +5,25 @@ import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { SettingsProvider } from '@/contexts/SettingsContext';
-import { HistoryProvider } from '@/contexts/HistoryContext';
+import { HistoryProvider, useHistory } from '@/contexts/HistoryContext';
+import { LanguageProvider, useLanguage } from '@/contexts/LanguageContext';
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  const { isLoaded: langLoaded } = useLanguage();
+  const { isLoaded: histLoaded } = useHistory();
+
+  useEffect(() => {
+    if (langLoaded && histLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [langLoaded, histLoaded]);
+
+  if (!langLoaded || !histLoaded) return null;
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -20,20 +32,18 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  useEffect(() => {
-    SplashScreen.hideAsync();
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView>
-        <ThemeProvider>
-          <SettingsProvider>
-            <HistoryProvider>
-              <RootLayoutNav />
-            </HistoryProvider>
-          </SettingsProvider>
-        </ThemeProvider>
+        <LanguageProvider>
+          <ThemeProvider>
+            <SettingsProvider>
+              <HistoryProvider>
+                <RootLayoutNav />
+              </HistoryProvider>
+            </SettingsProvider>
+          </ThemeProvider>
+        </LanguageProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
   );

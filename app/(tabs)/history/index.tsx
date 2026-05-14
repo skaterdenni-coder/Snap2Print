@@ -19,9 +19,12 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Box, ExternalLink, Trash2, XCircle, Clock, Share2, AlertTriangle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useSettings } from '@/contexts/SettingsContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useHistory, HistoryEntry } from '@/contexts/HistoryContext';
-import { rainbowGradient } from '@/constants/colors';
+import { getTripoTaskStatus } from '@/utils/tripo';
 import { resizeGLB, resizeGLBToBytes } from '@/utils/modelResizer';
+import { rainbowGradient } from '@/constants/colors';
 
 type ProcessingTask = {
   taskId: string;
@@ -29,52 +32,23 @@ type ProcessingTask = {
   progress: number;
 };
 
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 export default function HistoryScreen() {
   const { colors, mode } = useTheme();
+  const { apiKey } = useSettings();
+  const { t, language } = useLanguage();
   const { entries, removeEntry, clearHistory } = useHistory();
   const insets = useSafeAreaInsets();
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
   const [processingTask, setProcessingTask] = useState<ProcessingTask | null>(null);
   const isRainbow = mode === 'rainbow';
-
-  const bytesToBase64 = useCallback((bytes: Uint8Array): string => {
-    let binary = '';
-    const chunkSize = 0x8000;
-
-    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-      const chunk = bytes.subarray(offset, offset + chunkSize);
-      binary += String.fromCharCode.apply(null, Array.from(chunk));
-    }
-
-    return btoa(binary);
-  }, []);
-
-  const createLocalGlbFileAsync = useCallback(async (
-    url: string,
-    targetHeightMeters?: number,
-    onProgress?: (label: string, progress: number) => void
-  ): Promise<string> => {
-    if (!FileSystem.cacheDirectory) {
-      throw new Error('Cache-Verzeichnis nicht verfügbar.');
-    }
-
-    onProgress?.('GLB wird heruntergeladen...', 15);
-    const bytes = targetHeightMeters
-      ? (onProgress?.('Modell wird skaliert...', 40), await resizeGLBToBytes(url, targetHeightMeters))
-      : new Uint8Array(await (await fetch(url)).arrayBuffer());
-
-    onProgress?.('Datei wird vorbereitet...', 70);
-    const base64 = bytesToBase64(bytes);
-    const safeHeight = targetHeightMeters ? `-${String(targetHeightMeters).replace(/[^0-9.]/g, '_')}m` : '';
-    const fileUri = `${FileSystem.cacheDirectory}modell-${Date.now()}${safeHeight}.glb`;
-
-    onProgress?.('GLB wird lokal gespeichert...', 85);
-    await FileSystem.writeAsStringAsync(fileUri, base64, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-
-    return fileUri;
-  }, [bytesToBase64]);
 
   const getExpirationStatus = (completedAt: string) => {
     const start = new Date(completedAt).getTime();
@@ -86,20 +60,20 @@ export default function HistoryScreen() {
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
 
-    if (diff <= 0) return { label: 'Abgelaufen', color: colors.danger, urgent: true };
-    if (days < 3) return { label: `${days}t ${hours}h übrig`, color: '#FF9F43', urgent: true };
-    return { label: `${days} Tage übrig`, color: colors.textTertiary, urgent: false };
+    if (diff <= 0) return { label: t.status.expired, color: colors.danger, urgent: true };
+    if (days < 3) return { label: `${days}d ${hours}h ${t.timeLeft}`, color: '#FF9F43', urgent: true };
+    return { label: `${days} ${t.daysLeft}`, color: colors.textTertiary, urgent: false };
   };
 
   const handleClearAll = useCallback(() => {
     if (entries.length === 0) return;
     Alert.alert(
-      'Historie löschen',
-      'Möchtest du wirklich alle Einträge löschen? Dies kann nicht rückgängig gemacht werden.',
+      t.deleteHistoryTitle,
+      t.deleteHistoryDesc,
       [
-        { text: 'Abbrechen', style: 'cancel' },
+        { text: t.cancel, style: 'cancel' },
         {
-          text: 'Löschen',
+          text: t.delete,
           style: 'destructive',
           onPress: () => {
             clearHistory();
@@ -110,7 +84,7 @@ export default function HistoryScreen() {
         },
       ],
     );
-  }, [entries.length, clearHistory]);
+  }, [entries.length, clearHistory, t]);
 
   const handleRemove = useCallback((taskId: string) => {
     if (Platform.OS !== 'web') {
@@ -119,31 +93,53 @@ export default function HistoryScreen() {
     removeEntry(taskId);
   }, [removeEntry]);
 
-  const downloadFile = useCallback(async (taskId: string, url: string, format: string, targetHeightMeters?: number) => {
-    const setProgress = (label: string, progress: number) => {
-      setProcessingTask({ taskId, label, progress });
-    };
+  const createLocalGlbFileAsync = useCallback(async (
+    glbUrl: string,
+    targetHeightMeters?: number,
+    onProgress?: (label: string, progress: number) => void,
+  ): Promise<string> => {
+    onProgress?.(targetHeightMeters ? 'Skaliere GLB-Modell...' : 'Lade GLB-Modell...', 20);
 
-    if (Platform.OS === 'web') {
-      try {
-        setProgress('GLB wird heruntergeladen...', 15);
-        const blob = format.toLowerCase() === 'glb' && targetHeightMeters
-          ? (setProgress('Modell wird skaliert...', 45), await resizeGLB(url, targetHeightMeters))
+    const bytes = targetHeightMeters
+      ? await resizeGLBToBytes(glbUrl, targetHeightMeters)
+      : new Uint8Array(await (await fetch(glbUrl)).arrayBuffer());
+
+    onProgress?.('Speichere Datei...', 75);
+    const fileUri = `${FileSystem.cacheDirectory ?? ''}model-${Date.now()}.glb`;
+    await FileSystem.writeAsStringAsync(fileUri, bytesToBase64(bytes), {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    onProgress?.('Bereite Teilen vor...', 95);
+    return fileUri;
+  }, []);
+
+  const downloadFile = useCallback(async (taskId: string, format: string, targetHeightMeters?: number) => {
+    if (!apiKey) {
+      Alert.alert(t.error, 'No API Key found');
+      return;
+    }
+
+    setProcessingTask({ taskId, label: 'Erneuere Download-Link...', progress: 10 });
+    try {
+      const tripoData = await getTripoTaskStatus(apiKey, taskId);
+      const url = format === 'glb' ? tripoData.output?.pbr_model || tripoData.output?.model : tripoData.output?.[format.toLowerCase()];
+
+      if (!url) {
+        throw new Error('Download link could not be renewed');
+      }
+
+      if (Platform.OS === 'web') {
+        setProcessingTask({ taskId, label: targetHeightMeters && format === 'glb' ? 'Skaliere GLB-Modell...' : 'Lade Datei...', progress: 35 });
+        const blob = targetHeightMeters && format === 'glb'
+          ? await resizeGLB(url, targetHeightMeters)
           : await (await fetch(url)).blob();
-        setProgress('Datei wird vorbereitet...', 75);
-        const filename = `modell-${Date.now()}.${format.toLowerCase()}`;
+        setProcessingTask({ taskId, label: 'Bereite Download vor...', progress: 90 });
+        const filename = `model-${taskId}.${format.toLowerCase()}`;
         const file = new File([blob], filename, { type: 'model/gltf-binary' });
 
-        setProgress('Share Sheet wird geöffnet...', 95);
-        // Prüfen, ob das Teilen von Dateien unterstützt wird
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: '3D Modell',
-            text: 'Mein generiertes 3D Modell',
-          });
+          await navigator.share({ files: [file], title: '3D Model', text: 'My 3D Model' });
         } else {
-          // Fallback: Direkter Download
           const blobUrl = window.URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = blobUrl;
@@ -153,67 +149,58 @@ export default function HistoryScreen() {
           document.body.removeChild(link);
           window.URL.revokeObjectURL(blobUrl);
         }
-      } catch (error) {
-        console.error('Share/Download error:', error);
-        Linking.openURL(url);
-      } finally {
-        setProcessingTask(null);
-      }
-    } else if (format.toLowerCase() === 'glb') {
-      try {
-        const fileUri = await createLocalGlbFileAsync(url, targetHeightMeters, setProgress);
-        const canShare = await Sharing.isAvailableAsync();
-
-        if (!canShare) {
-          setProgress('Datei wird geöffnet...', 95);
-          await Linking.openURL(fileUri);
-          return;
+      } else if (format === 'glb') {
+        const fileUri = await createLocalGlbFileAsync(url, targetHeightMeters, (label, progress) => {
+          setProcessingTask({ taskId, label, progress });
+        });
+        const sharingAvailable = await Sharing.isAvailableAsync();
+        if (!sharingAvailable) {
+          throw new Error('Sharing is not available on this device');
         }
-
-        setProgress('Share Sheet wird geöffnet...', 95);
         await Sharing.shareAsync(fileUri, {
           mimeType: 'model/gltf-binary',
           UTI: 'com.khronos.glb',
           dialogTitle: 'GLB-Modell teilen',
         });
-      } catch (error) {
-        console.error('Native GLB share error:', error);
-        Alert.alert('Fehler', 'Das GLB konnte nicht lokal vorbereitet werden.');
-      } finally {
-        setProcessingTask(null);
+      } else {
+        Linking.openURL(url);
       }
-    } else {
-      Linking.openURL(url);
+    } catch (error) {
+      console.error('Download/Refresh error:', error);
+      Alert.alert(t.error, 'The download link could not be loaded.');
+    } finally {
+      setProcessingTask(null);
     }
-  }, [createLocalGlbFileAsync]);
+  }, [apiKey, createLocalGlbFileAsync, t]);
 
-  const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string, targetHeightMeters?: number) => {
+  const shareToLitterboxAndAR = useCallback(async (taskId: string, targetHeightMeters?: number) => {
+    if (!apiKey) return;
     setUploadingTaskId(taskId);
-    const setProgress = (label: string, progress: number) => {
-      setProcessingTask({ taskId, label, progress });
-    };
-
+    setProcessingTask({ taskId, label: 'Erneuere GLB-Link...', progress: 10 });
     try {
+      const tripoData = await getTripoTaskStatus(apiKey, taskId);
+      const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model;
+
+      if (!glbUrl) throw new Error('GLB URL not found');
+
       const formData = new FormData();
       formData.append('reqtype', 'fileupload');
       formData.append('time', '24h');
-      if (targetHeightMeters && Platform.OS === 'web') {
-        setProgress('Modell wird skaliert...', 35);
-        const resizedBlob = await resizeGLB(glbUrl, targetHeightMeters);
-        const filename = `model-${targetHeightMeters}m.glb`;
-        setProgress('Upload wird vorbereitet...', 65);
-        formData.append('fileToUpload', new File([resizedBlob], filename, { type: 'model/gltf-binary' }));
-      } else if (targetHeightMeters) {
-        const fileUri = await createLocalGlbFileAsync(glbUrl, targetHeightMeters, setProgress);
-        // @ts-ignore
-        formData.append('fileToUpload', {
-          uri: fileUri,
-          name: `model-${targetHeightMeters}m.glb`,
-          type: 'model/gltf-binary',
-        });
+
+      if (targetHeightMeters) {
+        if (Platform.OS === 'web') {
+          setProcessingTask({ taskId, label: 'Skaliere GLB-Modell...', progress: 35 });
+          const resizedBlob = await resizeGLB(glbUrl, targetHeightMeters);
+          formData.append('fileToUpload', new File([resizedBlob], 'model.glb', { type: 'model/gltf-binary' }));
+        } else {
+          const fileUri = await createLocalGlbFileAsync(glbUrl, targetHeightMeters, (label, progress) => {
+            setProcessingTask({ taskId, label, progress });
+          });
+          // @ts-ignore React Native accepts file descriptors in FormData.
+          formData.append('fileToUpload', { uri: fileUri, name: 'model.glb', type: 'model/gltf-binary' });
+        }
       } else {
-        setProgress('Upload wird vorbereitet...', 35);
-        // @ts-ignore
+        // @ts-ignore React Native accepts file descriptors in FormData.
         formData.append('fileToUpload', {
           uri: glbUrl,
           name: 'model.glb',
@@ -221,41 +208,36 @@ export default function HistoryScreen() {
         });
       }
 
-      setProgress('Modell wird hochgeladen...', 85);
+      setProcessingTask({ taskId, label: 'Lade Modell fuer AR hoch...', progress: 80 });
       const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
         method: 'POST',
         body: formData,
-        headers: { 'Accept': 'application/json' },
       });
 
       const litterboxUrl = await uploadRes.text();
 
       if (!litterboxUrl.startsWith('http')) {
-        throw new Error('Upload zu Litterbox fehlgeschlagen');
+        throw new Error('Upload to Litterbox failed');
       }
 
       const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl.trim())}`;
 
-      setProgress('AR-Link wird geteilt...', 95);
+      setProcessingTask({ taskId, label: 'Oeffne Teilen...', progress: 100 });
       await Share.share({
-        message: `Schau dir mein 3D-Modell in AR an: ${viewerUrl}`,
+        message: `Check out my 3D model in AR: ${viewerUrl}`,
         url: viewerUrl,
-        title: 'AR Modell teilen',
+        title: 'Share AR Model',
       });
     } catch (error) {
       console.error('Sharing error:', error);
-      Alert.alert('Fehler', 'Das Modell konnte nicht hochgeladen oder geteilt werden.');
+      Alert.alert(t.error, 'The model could not be uploaded or shared.');
     } finally {
       setUploadingTaskId(null);
       setProcessingTask(null);
     }
-  }, [createLocalGlbFileAsync]);
+  }, [apiKey, createLocalGlbFileAsync, t]);
 
   const renderItem = useCallback(({ item, index }: { item: HistoryEntry; index: number }) => {
-    const formatCount = item.modelUrls
-      ? Object.values(item.modelUrls).filter(Boolean).length
-      : 0;
-
     const expiry = getExpirationStatus(item.completedAt);
     const currentProcessing = processingTask?.taskId === item.taskId ? processingTask : null;
 
@@ -284,7 +266,7 @@ export default function HistoryScreen() {
           )}
           <View style={styles.cardInfo}>
             <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
-              {item.name || `Modell #${entries.length - index}`}
+              {item.name || `${t.model} #${entries.length - index}`}
             </Text>
             <View style={styles.dateRow}>
               <Clock size={12} color={colors.textTertiary} />
@@ -305,10 +287,9 @@ export default function HistoryScreen() {
                 {expiry.label}
               </Text>
             </View>
-
             {item.modelHeightMeters && (
-              <Text style={[styles.formatInfo, { color: colors.textSecondary }]}>
-                Höhe: {item.modelHeightMeters} m
+              <Text style={[styles.heightText, { color: colors.textSecondary }]}>
+                Hoehe: {item.modelHeightMeters} m
               </Text>
             )}
           </View>
@@ -316,7 +297,6 @@ export default function HistoryScreen() {
             style={[styles.deleteButton, { backgroundColor: colors.danger + '12' }]}
             onPress={() => handleRemove(item.taskId)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            testID={`delete-history-${item.taskId}`}
           >
             <Trash2 size={16} color={colors.danger} />
           </TouchableOpacity>
@@ -336,7 +316,7 @@ export default function HistoryScreen() {
                       overflow: 'hidden',
                     },
                   ]}
-                  onPress={() => downloadFile(item.taskId, url, format, item.modelHeightMeters)}
+                  onPress={() => downloadFile(item.taskId, format, item.modelHeightMeters)}
                   disabled={currentProcessing !== null}
                   activeOpacity={0.7}
                 >
@@ -364,7 +344,7 @@ export default function HistoryScreen() {
                     borderColor: colors.success + '30',
                   },
                 ]}
-                onPress={() => item.modelUrls?.glb && shareToLitterboxAndAR(item.taskId, item.modelUrls.glb, item.modelHeightMeters)}
+                onPress={() => shareToLitterboxAndAR(item.taskId, item.modelHeightMeters)}
                 disabled={uploadingTaskId === item.taskId || currentProcessing !== null}
               >
                 {uploadingTaskId === item.taskId ? (
@@ -372,14 +352,13 @@ export default function HistoryScreen() {
                 ) : (
                   <>
                     <Share2 size={12} color={colors.success} />
-                    <Text style={[styles.shareChipText, { color: colors.success }]}>AR TEILEN</Text>
+                    <Text style={[styles.shareChipText, { color: colors.success }]}>{t.arShare}</Text>
                   </>
                 )}
               </TouchableOpacity>
             )}
           </View>
         )}
-
         {currentProcessing && (
           <View style={styles.processingBox}>
             <View style={styles.processingHeader}>
@@ -392,33 +371,25 @@ export default function HistoryScreen() {
               </Text>
             </View>
             <View style={[styles.processingBarBg, { backgroundColor: colors.inputBackground }]}>
-              <View
-                style={[
-                  styles.processingBarFill,
-                  {
-                    width: `${currentProcessing.progress}%`,
-                    backgroundColor: colors.accent,
-                  },
-                ]}
-              />
+              <View style={[styles.processingBarFill, { width: `${currentProcessing.progress}%`, backgroundColor: colors.accent }]} />
             </View>
           </View>
         )}
       </View>
     );
-  }, [colors, isRainbow, entries.length, handleRemove, downloadFile, uploadingTaskId, processingTask, shareToLitterboxAndAR]);
+  }, [colors, isRainbow, entries.length, handleRemove, downloadFile, processingTask, uploadingTaskId, shareToLitterboxAndAR, t]);
 
   const renderEmpty = useCallback(() => (
     <View style={styles.emptyContainer}>
       <View style={[styles.emptyIconCircle, { backgroundColor: colors.inputBackground }]}>
         <Box size={40} color={colors.textTertiary} />
       </View>
-      <Text style={[styles.emptyTitle, { color: colors.text }]}>Keine Modelle</Text>
+      <Text style={[styles.emptyTitle, { color: colors.text }]}>{t.noModels}</Text>
       <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-        Erstellte 3D-Modelle werden hier automatisch gespeichert.
+        {t.emptyHistory}
       </Text>
     </View>
-  ), [colors]);
+  ), [colors, t]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -431,25 +402,24 @@ export default function HistoryScreen() {
               end={{ x: 1, y: 0 }}
               style={styles.titleGradient}
             >
-              <Text style={[styles.title, { color: '#FFF' }]}>Historie</Text>
+              <Text style={[styles.title, { color: '#FFF' }]}>{t.historyTitle}</Text>
             </LinearGradient>
           ) : (
-            <Text style={[styles.title, { color: colors.text }]}>Historie</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{t.historyTitle}</Text>
           )}
           {entries.length > 0 && (
             <TouchableOpacity
               onPress={handleClearAll}
               style={[styles.clearButton, { backgroundColor: colors.danger + '12' }]}
               activeOpacity={0.7}
-              testID="clear-history-button"
             >
               <XCircle size={16} color={colors.danger} />
-              <Text style={[styles.clearText, { color: colors.danger }]}>Alle löschen</Text>
+              <Text style={[styles.clearText, { color: colors.danger }]}>{t.deleteAll}</Text>
             </TouchableOpacity>
           )}
         </View>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {entries.length} {entries.length === 1 ? 'Modell' : 'Modelle'} erstellt
+          {entries.length} {entries.length === 1 ? t.model : t.models} {language === 'de' ? 'erstellt' : 'created'}
         </Text>
       </View>
 
@@ -470,194 +440,41 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  headerArea: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  titleGradient: {
-    borderRadius: 8,
-    paddingHorizontal: 4,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: '800' as const,
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 15,
-    marginTop: 4,
-  },
-  clearButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-  },
-  clearText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-  },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-  },
-  emptyListContent: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 12,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'flex-start',
-  },
-  thumbnail: {
-    width: 72,
-    height: 72,
-    borderRadius: 14,
-  },
-  thumbnailPlaceholder: {
-    width: 72,
-    height: 72,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardInfo: {
-    flex: 1,
-    gap: 4,
-    paddingTop: 2,
-  },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: '700' as const,
-  },
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  dateText: {
-    fontSize: 12,
-  },
-  expiryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: 2,
-  },
-  expiryText: {
-    fontSize: 12,
-  },
-  formatInfo: {
-    fontSize: 13,
-  },
-  deleteButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  downloadRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(150,150,150,0.2)',
-  },
-  downloadChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-  },
-  shareChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  shareChipText: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-  },
-  processingBox: {
-    marginTop: 12,
-    gap: 8,
-  },
-  processingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  processingText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600' as const,
-  },
-  processingPercent: {
-    width: 42,
-    textAlign: 'right',
-    fontSize: 12,
-    fontWeight: '700' as const,
-  },
-  processingBarBg: {
-    height: 7,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  processingBarFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    gap: 12,
-  },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-  },
-  emptySubtitle: {
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  container: { flex: 1 },
+  headerArea: { paddingHorizontal: 20, paddingBottom: 12 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  titleGradient: { borderRadius: 8, paddingHorizontal: 4 },
+  title: { fontSize: 34, fontWeight: '800', letterSpacing: -0.5 },
+  subtitle: { fontSize: 15, marginTop: 4 },
+  clearButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10 },
+  clearText: { fontSize: 13, fontWeight: '600' },
+  listContent: { paddingHorizontal: 20, paddingTop: 8 },
+  emptyListContent: { flex: 1, justifyContent: 'center' },
+  card: { borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 12 },
+  cardTop: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
+  thumbnail: { width: 72, height: 72, borderRadius: 14 },
+  thumbnailPlaceholder: { width: 72, height: 72, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  cardInfo: { flex: 1, gap: 4, paddingTop: 2 },
+  cardTitle: { fontSize: 17, fontWeight: '700' },
+  dateRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  dateText: { fontSize: 12 },
+  expiryRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  expiryText: { fontSize: 12 },
+  heightText: { fontSize: 12, fontWeight: '600' },
+  deleteButton: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  downloadRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(150,150,150,0.2)' },
+  downloadChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1 },
+  chipText: { fontSize: 12, fontWeight: '700' },
+  shareChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1 },
+  shareChipText: { fontSize: 12, fontWeight: '700' },
+  processingBox: { marginTop: 12, gap: 8 },
+  processingHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  processingText: { flex: 1, fontSize: 12, fontWeight: '600' },
+  processingPercent: { fontSize: 12, fontWeight: '700', width: 40, textAlign: 'right' },
+  processingBarBg: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  processingBarFill: { height: '100%', borderRadius: 3 },
+  emptyContainer: { alignItems: 'center', paddingHorizontal: 40, gap: 12 },
+  emptyIconCircle: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  emptyTitle: { fontSize: 20, fontWeight: '700' },
+  emptySubtitle: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
 });
