@@ -45,3 +45,4 @@ rork-eslint.config.js
 core
 node_modules
 .expo
+app/(tabs)/(home)/.index.tsx.swp

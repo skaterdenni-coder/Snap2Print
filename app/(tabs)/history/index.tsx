@@ -15,13 +15,22 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import { File as ExpoFile, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { Box, ExternalLink, Trash2, XCircle, Clock, Share2, AlertTriangle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useHistory, HistoryEntry } from '@/contexts/HistoryContext';
 import { getTripoTaskStatus } from '@/utils/tripo';
+import { resizeGLB, resizeGLBToBytes } from '@/utils/modelResizer';
 import { rainbowGradient } from '@/constants/colors';
+
+type ProcessingTask = {
+  taskId: string;
+  label: string;
+  progress: number;
+};
 
 export default function HistoryScreen() {
   const { colors, mode } = useTheme();
@@ -30,6 +39,7 @@ export default function HistoryScreen() {
   const { entries, removeEntry, clearHistory } = useHistory();
   const insets = useSafeAreaInsets();
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
+  const [processingTask, setProcessingTask] = useState<ProcessingTask | null>(null);
   const isRainbow = mode === 'rainbow';
 
   const getExpirationStatus = (completedAt: string) => {
@@ -75,12 +85,35 @@ export default function HistoryScreen() {
     removeEntry(taskId);
   }, [removeEntry]);
 
-  const downloadFile = useCallback(async (taskId: string, format: string) => {
+  const createLocalGlbFileAsync = useCallback(async (
+    glbUrl: string,
+    targetHeightMeters?: number,
+    onProgress?: (label: string, progress: number) => void,
+  ): Promise<string> => {
+    onProgress?.(targetHeightMeters ? 'Skaliere GLB-Modell...' : 'Lade GLB-Modell...', 20);
+
+    const file = new ExpoFile(Paths.cache, `model-${Date.now()}.glb`);
+
+    if (targetHeightMeters) {
+      const bytes = await resizeGLBToBytes(glbUrl, targetHeightMeters);
+      onProgress?.('Speichere Datei...', 75);
+      file.write(bytes);
+    } else {
+      onProgress?.('Speichere Datei...', 75);
+      await ExpoFile.downloadFileAsync(glbUrl, file, { idempotent: true });
+    }
+
+    onProgress?.('Bereite Teilen vor...', 95);
+    return file.uri;
+  }, []);
+
+  const downloadFile = useCallback(async (taskId: string, format: string, targetHeightMeters?: number) => {
     if (!apiKey) {
       Alert.alert(t.error, 'No API Key found');
       return;
     }
 
+    setProcessingTask({ taskId, label: 'Erneuere Download-Link...', progress: 10 });
     try {
       const tripoData = await getTripoTaskStatus(apiKey, taskId);
       const url = format === 'glb' ? tripoData.output?.pbr_model || tripoData.output?.model : tripoData.output?.[format.toLowerCase()];
@@ -90,8 +123,11 @@ export default function HistoryScreen() {
       }
 
       if (Platform.OS === 'web') {
-        const response = await fetch(url);
-        const blob = await response.blob();
+        setProcessingTask({ taskId, label: targetHeightMeters && format === 'glb' ? 'Skaliere GLB-Modell...' : 'Lade Datei...', progress: 35 });
+        const blob = targetHeightMeters && format === 'glb'
+          ? await resizeGLB(url, targetHeightMeters)
+          : await (await fetch(url)).blob();
+        setProcessingTask({ taskId, label: 'Bereite Download vor...', progress: 90 });
         const filename = `model-${taskId}.${format.toLowerCase()}`;
         const file = new File([blob], filename, { type: 'model/gltf-binary' });
 
@@ -107,18 +143,34 @@ export default function HistoryScreen() {
           document.body.removeChild(link);
           window.URL.revokeObjectURL(blobUrl);
         }
+      } else if (format === 'glb') {
+        const fileUri = await createLocalGlbFileAsync(url, targetHeightMeters, (label, progress) => {
+          setProcessingTask({ taskId, label, progress });
+        });
+        const sharingAvailable = await Sharing.isAvailableAsync();
+        if (!sharingAvailable) {
+          throw new Error('Sharing is not available on this device');
+        }
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'model/gltf-binary',
+          UTI: 'com.khronos.glb',
+          dialogTitle: 'GLB-Modell teilen',
+        });
       } else {
         Linking.openURL(url);
       }
     } catch (error) {
       console.error('Download/Refresh error:', error);
       Alert.alert(t.error, 'The download link could not be loaded.');
+    } finally {
+      setProcessingTask(null);
     }
-  }, [apiKey, t]);
+  }, [apiKey, createLocalGlbFileAsync, t]);
 
-  const shareToLitterboxAndAR = useCallback(async (taskId: string) => {
+  const shareToLitterboxAndAR = useCallback(async (taskId: string, targetHeightMeters?: number) => {
     if (!apiKey) return;
     setUploadingTaskId(taskId);
+    setProcessingTask({ taskId, label: 'Erneuere GLB-Link...', progress: 10 });
     try {
       const tripoData = await getTripoTaskStatus(apiKey, taskId);
       const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model;
@@ -128,13 +180,29 @@ export default function HistoryScreen() {
       const formData = new FormData();
       formData.append('reqtype', 'fileupload');
       formData.append('time', '24h');
-      // @ts-ignore
-      formData.append('fileToUpload', {
-        uri: glbUrl,
-        name: 'model.glb',
-        type: 'model/gltf-binary',
-      });
 
+      if (targetHeightMeters) {
+        if (Platform.OS === 'web') {
+          setProcessingTask({ taskId, label: 'Skaliere GLB-Modell...', progress: 35 });
+          const resizedBlob = await resizeGLB(glbUrl, targetHeightMeters);
+          formData.append('fileToUpload', new File([resizedBlob], 'model.glb', { type: 'model/gltf-binary' }));
+        } else {
+          const fileUri = await createLocalGlbFileAsync(glbUrl, targetHeightMeters, (label, progress) => {
+            setProcessingTask({ taskId, label, progress });
+          });
+          // @ts-ignore React Native accepts file descriptors in FormData.
+          formData.append('fileToUpload', { uri: fileUri, name: 'model.glb', type: 'model/gltf-binary' });
+        }
+      } else {
+        // @ts-ignore React Native accepts file descriptors in FormData.
+        formData.append('fileToUpload', {
+          uri: glbUrl,
+          name: 'model.glb',
+          type: 'model/gltf-binary',
+        });
+      }
+
+      setProcessingTask({ taskId, label: 'Lade Modell fuer AR hoch...', progress: 80 });
       const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
         method: 'POST',
         body: formData,
@@ -148,6 +216,7 @@ export default function HistoryScreen() {
 
       const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl.trim())}`;
 
+      setProcessingTask({ taskId, label: 'Oeffne Teilen...', progress: 100 });
       await Share.share({
         message: `Check out my 3D model in AR: ${viewerUrl}`,
         url: viewerUrl,
@@ -158,11 +227,13 @@ export default function HistoryScreen() {
       Alert.alert(t.error, 'The model could not be uploaded or shared.');
     } finally {
       setUploadingTaskId(null);
+      setProcessingTask(null);
     }
-  }, [apiKey, t]);
+  }, [apiKey, createLocalGlbFileAsync, t]);
 
   const renderItem = useCallback(({ item, index }: { item: HistoryEntry; index: number }) => {
     const expiry = getExpirationStatus(item.completedAt);
+    const currentProcessing = processingTask?.taskId === item.taskId ? processingTask : null;
 
     return (
       <View
@@ -210,6 +281,11 @@ export default function HistoryScreen() {
                 {expiry.label}
               </Text>
             </View>
+            {item.modelHeightMeters && (
+              <Text style={[styles.heightText, { color: colors.textSecondary }]}>
+                Hoehe: {item.modelHeightMeters} m
+              </Text>
+            )}
           </View>
           <TouchableOpacity
             style={[styles.deleteButton, { backgroundColor: colors.danger + '12' }]}
@@ -234,7 +310,8 @@ export default function HistoryScreen() {
                       overflow: 'hidden',
                     },
                   ]}
-                  onPress={() => downloadFile(item.taskId, format)}
+                  onPress={() => downloadFile(item.taskId, format, item.modelHeightMeters)}
+                  disabled={currentProcessing !== null}
                   activeOpacity={0.7}
                 >
                   {isRainbow && (
@@ -261,8 +338,8 @@ export default function HistoryScreen() {
                     borderColor: colors.success + '30',
                   },
                 ]}
-                onPress={() => shareToLitterboxAndAR(item.taskId)}
-                disabled={uploadingTaskId === item.taskId}
+                onPress={() => shareToLitterboxAndAR(item.taskId, item.modelHeightMeters)}
+                disabled={uploadingTaskId === item.taskId || currentProcessing !== null}
               >
                 {uploadingTaskId === item.taskId ? (
                   <ActivityIndicator size="small" color={colors.success} />
@@ -276,9 +353,25 @@ export default function HistoryScreen() {
             )}
           </View>
         )}
+        {currentProcessing && (
+          <View style={styles.processingBox}>
+            <View style={styles.processingHeader}>
+              <ActivityIndicator size="small" color={colors.accent} />
+              <Text style={[styles.processingText, { color: colors.text }]}>
+                {currentProcessing.label}
+              </Text>
+              <Text style={[styles.processingPercent, { color: colors.textSecondary }]}>
+                {currentProcessing.progress}%
+              </Text>
+            </View>
+            <View style={[styles.processingBarBg, { backgroundColor: colors.inputBackground }]}>
+              <View style={[styles.processingBarFill, { width: `${currentProcessing.progress}%`, backgroundColor: colors.accent }]} />
+            </View>
+          </View>
+        )}
       </View>
     );
-  }, [colors, isRainbow, entries.length, handleRemove, downloadFile, uploadingTaskId, shareToLitterboxAndAR, t]);
+  }, [colors, isRainbow, entries.length, handleRemove, downloadFile, processingTask, uploadingTaskId, shareToLitterboxAndAR, t]);
 
   const renderEmpty = useCallback(() => (
     <View style={styles.emptyContainer}>
@@ -361,12 +454,19 @@ const styles = StyleSheet.create({
   dateText: { fontSize: 12 },
   expiryRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
   expiryText: { fontSize: 12 },
+  heightText: { fontSize: 12, fontWeight: '600' },
   deleteButton: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   downloadRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(150,150,150,0.2)' },
   downloadChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1 },
   chipText: { fontSize: 12, fontWeight: '700' },
   shareChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1 },
   shareChipText: { fontSize: 12, fontWeight: '700' },
+  processingBox: { marginTop: 12, gap: 8 },
+  processingHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  processingText: { flex: 1, fontSize: 12, fontWeight: '600' },
+  processingPercent: { fontSize: 12, fontWeight: '700', width: 40, textAlign: 'right' },
+  processingBarBg: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  processingBarFill: { height: '100%', borderRadius: 3 },
   emptyContainer: { alignItems: 'center', paddingHorizontal: 40, gap: 12 },
   emptyIconCircle: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   emptyTitle: { fontSize: 20, fontWeight: '700' },

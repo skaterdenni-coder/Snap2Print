@@ -10,19 +10,22 @@ import {
   ActivityIndicator,
   Platform,
   Share,
+  TextInput,
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import { File as ExpoFile, Paths } from 'expo-file-system';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImagePlus, X, Sparkles, Box, Clock, CheckCircle, AlertCircle, Loader, Share2, HelpCircle } from 'lucide-react-native';
 import { useMutation } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { createTripoTask, getTripoTaskStatus, mapTripoStatus, createTripoRefineTask, imageUriToBase64DataUrl } from '@/utils/tripo';
+import { createTripoTask, getTripoTaskStatus, mapTripoStatus, createTripoRefineTask, imageUriToBase64DataUrl, TripoApiError } from '@/utils/tripo';
 import { rainbowGradient } from '@/constants/colors';
 import { useHistory } from '@/contexts/HistoryContext';
+import { resizeGLB, resizeGLBToBytes } from '@/utils/modelResizer';
 
 interface SelectedImage {
   uri: string;
@@ -40,6 +43,7 @@ interface TaskEntry {
   modelUrls?: { glb?: string };
   createdAt: string;
   isRefining?: boolean;
+  modelHeightMeters?: number;
 }
 
 const HELP_IMAGES: Record<string, any> = {
@@ -48,6 +52,16 @@ const HELP_IMAGES: Record<string, any> = {
   p3: require('../../../assets/images/B3.png'),
   p4: require('../../../assets/images/B4.png'),
 };
+
+function parseModelHeightMeters(value: string): number | undefined {
+  const normalized = value.trim().replace(',', '.');
+  if (!normalized) return undefined;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error('Bitte gib eine gültige Modellhöhe in Metern ein.');
+  }
+  return parsed;
+}
 
 export default function HomeScreen() {
   const { colors, mode } = useTheme();
@@ -76,21 +90,42 @@ export default function HomeScreen() {
   const [tasks, setTasks] = useState<TaskEntry[]>([]);
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
   const [activeHelpIdx, setActiveHelpIdx] = useState<number | null>(null);
+  const [modelHeightInput, setModelHeightInput] = useState<string>('');
   const pollIntervals = useRef<Record<string, ReturnType<typeof setInterval>>>({});
   const buttonScale = useRef(new Animated.Value(1)).current;
 
   const isRainbow = mode === 'rainbow';
 
-  const uploadToLitterbox = useCallback(async (glbUrl: string): Promise<string> => {
+  const createLocalGlbFileAsync = useCallback(async (glbUrl: string, targetHeightMeters: number): Promise<string> => {
+    const bytes = await resizeGLBToBytes(glbUrl, targetHeightMeters);
+    const file = new ExpoFile(Paths.cache, `scaled-model-${Date.now()}.glb`);
+    file.write(bytes);
+    return file.uri;
+  }, []);
+
+  const uploadToLitterbox = useCallback(async (glbUrl: string, targetHeightMeters?: number): Promise<string> => {
     const formData = new FormData();
     formData.append('reqtype', 'fileupload');
     formData.append('time', '24h');
-    // @ts-ignore
-    formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
+
+    if (targetHeightMeters) {
+      if (Platform.OS === 'web') {
+        const resizedBlob = await resizeGLB(glbUrl, targetHeightMeters);
+        formData.append('fileToUpload', new File([resizedBlob], 'model.glb', { type: 'model/gltf-binary' }));
+      } else {
+        const fileUri = await createLocalGlbFileAsync(glbUrl, targetHeightMeters);
+        // @ts-ignore React Native accepts file descriptors in FormData.
+        formData.append('fileToUpload', { uri: fileUri, name: 'model.glb', type: 'model/gltf-binary' });
+      }
+    } else {
+      // @ts-ignore React Native accepts file descriptors in FormData.
+      formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
+    }
+
     const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
     const litterboxUrl = (await uploadRes.text()).trim();
     return `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl)}`;
-  }, []);
+  }, [createLocalGlbFileAsync]);
 
   // Hilfs-Ref, um in den Intervallen auf die aktuellsten Task-Daten zuzugreifen
   const tasksRef = useRef<TaskEntry[]>([]);
@@ -131,6 +166,7 @@ export default function HomeScreen() {
         if (mappedStatus === 'SUCCEEDED') {
           clearInterval(interval);
           delete pollIntervals.current[taskId];
+          const completedTask = tasksRef.current.find(t => t.taskId === taskId);
 
           // Versuchen einen Namen aus Tripo-Tags oder Prompt zu extrahieren (falls vorhanden)
           const tripoName = tripoData.input?.prompt || tripoData.output?.label || tripoData.output?.tag;
@@ -149,13 +185,14 @@ export default function HomeScreen() {
             baseTaskId: isRefining ? baseTaskId : undefined,
             thumbnailUrl: currentThumb,
             modelUrls: currentModel,
+            modelHeightMeters: completedTask?.modelHeightMeters,
             createdAt: new Date().toISOString(),
             completedAt: new Date().toISOString(),
           });
 
           // Hintergrund-Upload für AR starten
           if (currentModel?.glb) {
-            uploadToLitterbox(currentModel.glb)
+            uploadToLitterbox(currentModel.glb, completedTask?.modelHeightMeters)
               .then(arUrl => updateEntry(taskId, { arUrl }))
               .catch(err => console.error('[AR] Background upload failed:', err));
           }
@@ -176,7 +213,7 @@ export default function HomeScreen() {
       }
     }, 4000);
     pollIntervals.current[taskId] = interval;
-  }, [apiKey, addEntry, updateTaskProgress, updateActiveTask, removeActiveTask, t.model]);
+  }, [apiKey, addEntry, updateTaskProgress, updateActiveTask, removeActiveTask, uploadToLitterbox, updateEntry, t.model]);
 
   useEffect(() => {
     if (hasApiKey && apiKey && activeTasks.length > 0) {
@@ -192,7 +229,8 @@ export default function HomeScreen() {
             createdAt: at.createdAt,
             isRefining: at.isRefining,
             thumbnailUrl: at.thumbnailUrl,
-            modelUrls: at.modelUrls
+            modelUrls: at.modelUrls,
+            modelHeightMeters: at.modelHeightMeters,
           }));
         return [...prev, ...resumedTasks];
       });
@@ -239,16 +277,19 @@ export default function HomeScreen() {
     mutationFn: async () => {
       const imageUris = images.map(img => img?.uri || null);
       if (imageUris.filter(u => u !== null).length < 1) throw new Error(t.minOneImage);
-      return await createTripoTask(apiKey, imageUris, qualityMode);
+      const modelHeightMeters = parseModelHeightMeters(modelHeightInput);
+      const result = await createTripoTask(apiKey, imageUris, qualityMode);
+      return { ...result, modelHeightMeters };
     },
-    onSuccess: ({ taskId, tokens }) => {
+    onSuccess: ({ taskId, tokens, modelHeightMeters }) => {
       const entry: TaskEntry = {
         id: `${Date.now()}`,
         taskId,
         tokens,
         status: 'PENDING',
         progress: 0,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        modelHeightMeters,
       };
 
       addActiveTask({
@@ -256,15 +297,23 @@ export default function HomeScreen() {
         taskId: entry.taskId,
         createdAt: entry.createdAt,
         progress: 0,
-        status: 'PENDING'
+        status: 'PENDING',
+        modelHeightMeters,
       });
 
       setTasks((prev) => [entry, ...prev]);
       setImages([null, null, null, null]);
+      setModelHeightInput('');
       startPolling(taskId);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: (error: Error) => Alert.alert(t.error, error.message),
+    onError: (error: Error) => {
+      if (error instanceof TripoApiError && error.isRetryable) {
+        Alert.alert(t.error, `${error.message}\n\nBitte versuche es gleich noch einmal.`);
+        return;
+      }
+      Alert.alert(t.error, error.message);
+    },
   });
 
   const handleCreate = useCallback(() => {
@@ -297,7 +346,7 @@ export default function HomeScreen() {
     }
   }, [createTaskMutation, buttonScale, images, t]);
 
-  const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string) => {
+  const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string, targetHeightMeters?: number) => {
     // 1. Prüfen, ob wir die URL schon in der History haben
     const existingEntry = entries.find(e => e.taskId === taskId);
     if (existingEntry?.arUrl) {
@@ -308,7 +357,7 @@ export default function HomeScreen() {
     // 2. Falls nicht, Upload starten/anzeigen
     setUploadingTaskId(taskId);
     try {
-      const viewerUrl = await uploadToLitterbox(glbUrl);
+      const viewerUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? existingEntry?.modelHeightMeters);
       updateEntry(taskId, { arUrl: viewerUrl });
       await Share.share({ message: `Check out my 3D model in AR: ${viewerUrl}`, url: viewerUrl, title: 'Share AR Model' });
     } catch (e) {
@@ -382,6 +431,25 @@ export default function HomeScreen() {
           })}
         </View>
 
+        <View style={[styles.scaleCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <View style={styles.scaleHeader}>
+            <Text style={[styles.scaleTitle, { color: colors.text }]}>Modellhöhe</Text>
+            <Text style={[styles.scaleUnit, { color: colors.textSecondary }]}>Meter</Text>
+          </View>
+          <TextInput
+            value={modelHeightInput}
+            onChangeText={setModelHeightInput}
+            placeholder="z. B. 1,85"
+            placeholderTextColor={colors.textTertiary}
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            style={[styles.scaleInput, { color: colors.text, backgroundColor: colors.inputBackground, borderColor: colors.cardBorder }]}
+          />
+          <Text style={[styles.scaleHint, { color: colors.textSecondary }]}>
+            Optional. Wenn gesetzt, wird die Höhe auf diesen Wert skaliert.
+          </Text>
+        </View>
+
         <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
           <TouchableOpacity
             style={[styles.createButton, { backgroundColor: isRainbow ? getRainbowColor(4) : colors.accent, opacity: images.every(img => img === null) || !hasApiKey || createTaskMutation.isPending ? 0.5 : 1 }]}
@@ -407,11 +475,16 @@ export default function HomeScreen() {
                       </Text>
                     </View>
                     {(task.status === 'PENDING' || task.status === 'IN_PROGRESS') && <View style={styles.progressBarContainer}><View style={[styles.progressBarBg, { backgroundColor: colors.inputBackground }]}><View style={[styles.progressBarFill, { width: `${task.progress}%`, backgroundColor: isRainbow ? getRainbowColor(idx + 5) : colors.accent }]} /></View><Text style={[styles.progressText, { color: colors.textSecondary }]}>{task.progress}%</Text></View>}
+                    {task.modelHeightMeters && (
+                      <Text style={[styles.taskScaleText, { color: colors.textSecondary }]}>
+                        Höhe: {task.modelHeightMeters} m
+                      </Text>
+                    )}
                   </View>
                 </View>
                 {task.status === 'SUCCEEDED' && task.modelUrls && (
                   <View style={styles.downloadLinks}>
-                    {task.modelUrls.glb && <TouchableOpacity style={[styles.shareChip, { backgroundColor: colors.success + '15', borderColor: colors.success + '30' }]} onPress={() => task.modelUrls?.glb && shareToLitterboxAndAR(task.id, task.modelUrls.glb)} disabled={uploadingTaskId === task.id}>{uploadingTaskId === task.id ? <ActivityIndicator size="small" color={colors.success} /> : <><Share2 size={12} color={colors.success} /><Text style={[styles.shareChipText, { color: colors.success }]}>{t.arShare}</Text></>}</TouchableOpacity>}
+                    {task.modelUrls.glb && <TouchableOpacity style={[styles.shareChip, { backgroundColor: colors.success + '15', borderColor: colors.success + '30' }]} onPress={() => task.modelUrls?.glb && shareToLitterboxAndAR(task.id, task.modelUrls.glb, task.modelHeightMeters)} disabled={uploadingTaskId === task.id}>{uploadingTaskId === task.id ? <ActivityIndicator size="small" color={colors.success} /> : <><Share2 size={12} color={colors.success} /><Text style={[styles.shareChipText, { color: colors.success }]}>{t.arShare}</Text></>}</TouchableOpacity>}
                   </View>
                 )}
               </View>
@@ -486,6 +559,12 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     textTransform: 'uppercase',
   },
+  scaleCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 16, gap: 10 },
+  scaleHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  scaleTitle: { fontSize: 15, fontWeight: '700' },
+  scaleUnit: { fontSize: 12, fontWeight: '600' },
+  scaleInput: { height: 46, borderRadius: 10, borderWidth: 1, paddingHorizontal: 12, fontSize: 16, fontWeight: '600' },
+  scaleHint: { fontSize: 12, lineHeight: 17 },
   createButton: { height: 56, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 },
   createButtonText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
   tasksSection: { marginTop: 24 },
@@ -496,6 +575,7 @@ const styles = StyleSheet.create({
   taskInfo: { flex: 1, gap: 6 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusText: { fontSize: 15, fontWeight: '600' },
+  taskScaleText: { fontSize: 12, fontWeight: '600' },
   progressBarContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   progressBarBg: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
   progressBarFill: { height: '100%', borderRadius: 3 },
