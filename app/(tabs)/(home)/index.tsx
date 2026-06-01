@@ -15,7 +15,7 @@ import {
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
-import * as FileSystem from 'expo-file-system/legacy';
+import { File as ExpoFile, Paths } from 'expo-file-system';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImagePlus, X, Sparkles, Box, Clock, CheckCircle, AlertCircle, Loader, Share2, HelpCircle } from 'lucide-react-native';
 import { useMutation } from '@tanstack/react-query';
@@ -63,14 +63,6 @@ function parseModelHeightMeters(value: string): number | undefined {
   return parsed;
 }
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
 export default function HomeScreen() {
   const { colors, mode } = useTheme();
   const { apiKey, hasApiKey, qualityMode } = useSettings();
@@ -106,11 +98,9 @@ export default function HomeScreen() {
 
   const createLocalGlbFileAsync = useCallback(async (glbUrl: string, targetHeightMeters: number): Promise<string> => {
     const bytes = await resizeGLBToBytes(glbUrl, targetHeightMeters);
-    const fileUri = `${FileSystem.cacheDirectory ?? ''}scaled-model-${Date.now()}.glb`;
-    await FileSystem.writeAsStringAsync(fileUri, bytesToBase64(bytes), {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    return fileUri;
+    const file = new ExpoFile(Paths.cache, `scaled-model-${Date.now()}.glb`);
+    file.write(bytes);
+    return file.uri;
   }, []);
 
   const uploadToLitterbox = useCallback(async (glbUrl: string, targetHeightMeters?: number): Promise<string> => {

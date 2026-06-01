@@ -15,7 +15,7 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import * as FileSystem from 'expo-file-system/legacy';
+import { File as ExpoFile, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Box, ExternalLink, Trash2, XCircle, Clock, Share2, AlertTriangle } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -31,14 +31,6 @@ type ProcessingTask = {
   label: string;
   progress: number;
 };
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
 
 export default function HistoryScreen() {
   const { colors, mode } = useTheme();
@@ -100,17 +92,19 @@ export default function HistoryScreen() {
   ): Promise<string> => {
     onProgress?.(targetHeightMeters ? 'Skaliere GLB-Modell...' : 'Lade GLB-Modell...', 20);
 
-    const bytes = targetHeightMeters
-      ? await resizeGLBToBytes(glbUrl, targetHeightMeters)
-      : new Uint8Array(await (await fetch(glbUrl)).arrayBuffer());
+    const file = new ExpoFile(Paths.cache, `model-${Date.now()}.glb`);
 
-    onProgress?.('Speichere Datei...', 75);
-    const fileUri = `${FileSystem.cacheDirectory ?? ''}model-${Date.now()}.glb`;
-    await FileSystem.writeAsStringAsync(fileUri, bytesToBase64(bytes), {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+    if (targetHeightMeters) {
+      const bytes = await resizeGLBToBytes(glbUrl, targetHeightMeters);
+      onProgress?.('Speichere Datei...', 75);
+      file.write(bytes);
+    } else {
+      onProgress?.('Speichere Datei...', 75);
+      await ExpoFile.downloadFileAsync(glbUrl, file, { idempotent: true });
+    }
+
     onProgress?.('Bereite Teilen vor...', 95);
-    return fileUri;
+    return file.uri;
   }, []);
 
   const downloadFile = useCallback(async (taskId: string, format: string, targetHeightMeters?: number) => {
