@@ -66,7 +66,7 @@ function parseModelHeightMeters(value: string): number | undefined {
 export default function HomeScreen() {
   const { colors, mode } = useTheme();
   const { apiKey, hasApiKey, qualityMode } = useSettings();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const {
     addEntry,
     activeTasks,
@@ -347,25 +347,26 @@ export default function HomeScreen() {
   }, [createTaskMutation, buttonScale, images, t]);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string, targetHeightMeters?: number) => {
-    // 1. Prüfen, ob wir die URL schon in der History haben
+    // NUR LINK SPEICHERN, SONST NICHTS
     const existingEntry = entries.find(e => e.taskId === taskId);
     if (existingEntry?.arUrl) {
-      await Share.share({ message: `Check out my 3D model in AR: ${existingEntry.arUrl}`, url: existingEntry.arUrl, title: 'Share AR Model' });
+      const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
+      await Share.share({ message: `${msg}: ${existingEntry.arUrl}`, url: existingEntry.arUrl });
       return;
     }
 
-    // 2. Falls nicht, Upload starten/anzeigen
     setUploadingTaskId(taskId);
     try {
       const viewerUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? existingEntry?.modelHeightMeters);
       updateEntry(taskId, { arUrl: viewerUrl });
-      await Share.share({ message: `Check out my 3D model in AR: ${viewerUrl}`, url: viewerUrl, title: 'Share AR Model' });
+      const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
+      await Share.share({ message: `${msg}: ${viewerUrl}`, url: viewerUrl });
     } catch (e) {
       Alert.alert(t.error, t.uploadFailed);
     } finally {
       setUploadingTaskId(null);
     }
-  }, [t, entries, uploadToLitterbox, updateEntry]);
+  }, [t, language, entries, uploadToLitterbox, updateEntry]);
 
   const getRainbowColor = (index: number) => rainbowGradient[index % rainbowGradient.length];
 

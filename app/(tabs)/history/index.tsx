@@ -36,7 +36,7 @@ export default function HistoryScreen() {
   const { colors, mode } = useTheme();
   const { apiKey } = useSettings();
   const { t, language } = useLanguage();
-  const { entries, removeEntry, clearHistory } = useHistory();
+  const { entries, removeEntry, clearHistory, updateEntry } = useHistory();
   const insets = useSafeAreaInsets();
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
   const [processingTask, setProcessingTask] = useState<ProcessingTask | null>(null);
@@ -168,6 +168,14 @@ export default function HistoryScreen() {
   }, [apiKey, createLocalGlbFileAsync, t]);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, targetHeightMeters?: number) => {
+    // 1. Caching: Falls der Link schon existiert, sofort teilen
+    const item = entries.find(e => e.taskId === taskId);
+    if (item?.arUrl) {
+      const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
+      await Share.share({ message: `${msg}: ${item.arUrl}`, url: item.arUrl });
+      return;
+    }
+
     if (!apiKey) return;
     setUploadingTaskId(taskId);
     setProcessingTask({ taskId, label: 'Erneuere GLB-Link...', progress: 10 });
@@ -216,9 +224,13 @@ export default function HistoryScreen() {
 
       const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl.trim())}`;
 
+      // 2. Link permanent speichern
+      updateEntry(taskId, { arUrl: viewerUrl });
+
       setProcessingTask({ taskId, label: 'Oeffne Teilen...', progress: 100 });
+      const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
       await Share.share({
-        message: `Check out my 3D model in AR: ${viewerUrl}`,
+        message: `${msg}: ${viewerUrl}`,
         url: viewerUrl,
         title: 'Share AR Model',
       });
@@ -229,7 +241,7 @@ export default function HistoryScreen() {
       setUploadingTaskId(null);
       setProcessingTask(null);
     }
-  }, [apiKey, createLocalGlbFileAsync, t]);
+  }, [apiKey, createLocalGlbFileAsync, t, entries, language, updateEntry]);
 
   const renderItem = useCallback(({ item, index }: { item: HistoryEntry; index: number }) => {
     const expiry = getExpirationStatus(item.completedAt);
