@@ -149,7 +149,7 @@ export default function SettingsScreen() {
               style={[styles.input, { color: colors.text }]}
               value={keyInput}
               onChangeText={setKeyInput}
-              placeholder="msy_xxxxxxxxxxxxxxxxxx"
+              placeholder="TSK_xxxxxxxxxxxxxxxxxx"
               placeholderTextColor={colors.textTertiary}
               secureTextEntry={!showKey}
               autoCapitalize="none"
@@ -367,7 +367,7 @@ export default function SettingsScreen() {
         )}
 
         <Text style={[styles.footerText, { color: colors.textTertiary }]}>
-          created by Dennis Werner 2026 V0.5.6.IS3
+          created by Dennis Werner 2026 V0.5.6.IS5
         </Text>
       </ScrollView>
     </View>
