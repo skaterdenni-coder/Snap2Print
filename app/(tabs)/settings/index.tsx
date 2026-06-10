@@ -149,7 +149,7 @@ export default function SettingsScreen() {
               style={[styles.input, { color: colors.text }]}
               value={keyInput}
               onChangeText={setKeyInput}
-              placeholder="TSK_xxxxxxxxxxxxxxxxxx"
+              placeholder="TSK_xxxxxxxxxxxxxxxxx"
               placeholderTextColor={colors.textTertiary}
               secureTextEntry={!showKey}
               autoCapitalize="none"
