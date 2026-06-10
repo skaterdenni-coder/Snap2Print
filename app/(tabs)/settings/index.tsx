@@ -98,7 +98,7 @@ export default function SettingsScreen() {
   };
 
   const openHelp = () => {
-    Linking.openURL('https://www.youtube.com/watch?v=x8jhxstnwY8&t=9s');
+    Linking.openURL('https://youtu.be/Sky7DNAcJPo');
   };
 
   const getThemeLabel = (mode: ThemeMode) => {
@@ -149,7 +149,7 @@ export default function SettingsScreen() {
               style={[styles.input, { color: colors.text }]}
               value={keyInput}
               onChangeText={setKeyInput}
-              placeholder="msy_xxxxxxxxxxxxxxxxxx"
+              placeholder="TSK_xxxxxxxxxxxxxxxxx"
               placeholderTextColor={colors.textTertiary}
               secureTextEntry={!showKey}
               autoCapitalize="none"
