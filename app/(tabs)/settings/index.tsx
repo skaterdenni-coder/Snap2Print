@@ -98,7 +98,7 @@ export default function SettingsScreen() {
   };
 
   const openHelp = () => {
-    Linking.openURL('https://www.youtube.com/watch?v=x8jhxstnwY8&t=9s');
+    Linking.openURL('https://youtu.be/Sky7DNAcJPo');
   };
 
   const getThemeLabel = (mode: ThemeMode) => {
