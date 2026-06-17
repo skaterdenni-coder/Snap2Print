@@ -168,9 +168,20 @@ export default function HistoryScreen() {
   }, [apiKey, createLocalGlbFileAsync, t]);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, targetHeightMeters?: number) => {
-    // 1. Caching: Falls der Link schon existiert, sofort teilen
+    // 1. Caching-Check: Nur nutzen, wenn Link existiert UND jünger als 20h ist
     const item = entries.find(e => e.taskId === taskId);
-    if (item?.arUrl) {
+    const EXPIRATION_MS = 20 * 60 * 60 * 1000; // 20 Stunden
+
+    let isLinkValid = false;
+    if (item?.arUrl && item.arUrlGeneratedAt) {
+      const generatedAt = new Date(item.arUrlGeneratedAt).getTime();
+      const now = new Date().getTime();
+      if (now - generatedAt < EXPIRATION_MS) {
+        isLinkValid = true;
+      }
+    }
+
+    if (isLinkValid && item?.arUrl) {
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
       await Share.share({ message: `${msg}: ${item.arUrl}`, url: item.arUrl });
       return;
@@ -198,11 +209,11 @@ export default function HistoryScreen() {
           const fileUri = await createLocalGlbFileAsync(glbUrl, targetHeightMeters, (label, progress) => {
             setProcessingTask({ taskId, label, progress });
           });
-          // @ts-ignore React Native accepts file descriptors in FormData.
+          // @ts-ignore
           formData.append('fileToUpload', { uri: fileUri, name: 'model.glb', type: 'model/gltf-binary' });
         }
       } else {
-        // @ts-ignore React Native accepts file descriptors in FormData.
+        // @ts-ignore
         formData.append('fileToUpload', {
           uri: glbUrl,
           name: 'model.glb',
@@ -224,8 +235,8 @@ export default function HistoryScreen() {
 
       const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl.trim())}`;
 
-      // 2. Link permanent speichern
-      updateEntry(taskId, { arUrl: viewerUrl });
+      // 2. Link permanent speichern inklusive Zeitstempel
+      updateEntry(taskId, { arUrl: viewerUrl, arUrlGeneratedAt: new Date().toISOString() });
 
       setProcessingTask({ taskId, label: 'Oeffne Teilen...', progress: 100 });
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';

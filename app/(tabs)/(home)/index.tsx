@@ -347,9 +347,20 @@ export default function HomeScreen() {
   }, [createTaskMutation, buttonScale, images, t]);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string, targetHeightMeters?: number) => {
-    // NUR LINK SPEICHERN, SONST NICHTS
+    // 1. Caching: Nur nutzen, wenn Link existiert UND jünger als 20h ist
     const existingEntry = entries.find(e => e.taskId === taskId);
-    if (existingEntry?.arUrl) {
+    const EXPIRATION_MS = 20 * 60 * 60 * 1000; // 20 Stunden
+
+    let isLinkValid = false;
+    if (existingEntry?.arUrl && existingEntry.arUrlGeneratedAt) {
+      const generatedAt = new Date(existingEntry.arUrlGeneratedAt).getTime();
+      const now = new Date().getTime();
+      if (now - generatedAt < EXPIRATION_MS) {
+        isLinkValid = true;
+      }
+    }
+
+    if (isLinkValid && existingEntry?.arUrl) {
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
       await Share.share({ message: `${msg}: ${existingEntry.arUrl}`, url: existingEntry.arUrl });
       return;
@@ -358,7 +369,7 @@ export default function HomeScreen() {
     setUploadingTaskId(taskId);
     try {
       const viewerUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? existingEntry?.modelHeightMeters);
-      updateEntry(taskId, { arUrl: viewerUrl });
+      updateEntry(taskId, { arUrl: viewerUrl, arUrlGeneratedAt: new Date().toISOString() });
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
       await Share.share({ message: `${msg}: ${viewerUrl}`, url: viewerUrl });
     } catch (e) {
