@@ -164,7 +164,7 @@ export async function createTripoTask(
     texture: true,
     pbr: true,
     texture_quality: quality === 'fast' ? 'standard' : 'detailed',
-    geometry_quality: 'detailed',
+    geometry_quality: 'standard',
     texture_alignment: 'original_image',
     orientation: 'align_image',
     orthographic_projection: false
