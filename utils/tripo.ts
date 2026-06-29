@@ -160,10 +160,10 @@ export async function createTripoTask(
 
   // Parameter hinzufügen
   Object.assign(body, {
-    face_limit: quality === 'fast' ? 500000 : 2000000,
+    face_limit: quality === 'fast' ? 750000 : 200000,
     texture: true,
     pbr: true,
-    texture_quality: quality === 'fast' ? 'standard' : 'detailed',
+    texture_quality: quality === 'fast' ? 'detailed' : 'detailed',
     geometry_quality: 'standard',
     texture_alignment: 'original_image',
     orientation: 'align_image',
