@@ -10,14 +10,17 @@ import {
   Platform,
   Share,
   ActivityIndicator,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { File as ExpoFile, Paths } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { Box, ExternalLink, Trash2, XCircle, Clock, Share2, AlertTriangle } from 'lucide-react-native';
+import { Box, ExternalLink, Trash2, XCircle, Clock, Share2, AlertTriangle, Edit2 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -40,6 +43,9 @@ export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
   const [uploadingTaskId, setUploadingTaskId] = useState<string | null>(null);
   const [processingTask, setProcessingTask] = useState<ProcessingTask | null>(null);
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const [renameTaskId, setRenameTaskId] = useState<string | null>(null);
   const isRainbow = mode === 'rainbow';
 
   const getExpirationStatus = (completedAt: string) => {
@@ -84,6 +90,23 @@ export default function HistoryScreen() {
     }
     removeEntry(taskId);
   }, [removeEntry]);
+
+  const openRenameModal = (taskId: string, currentName: string) => {
+    setRenameTaskId(taskId);
+    setRenameValue(currentName);
+    setRenameModalVisible(true);
+  };
+
+  const confirmRename = () => {
+    if (renameTaskId && renameValue.trim()) {
+      updateEntry(renameTaskId, { name: renameValue.trim() });
+      setRenameModalVisible(false);
+      setRenameTaskId(null);
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    }
+  };
 
   const createLocalGlbFileAsync = useCallback(async (
     glbUrl: string,
@@ -282,9 +305,15 @@ export default function HistoryScreen() {
             </View>
           )}
           <View style={styles.cardInfo}>
-            <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
-              {item.name || `${t.model} #${entries.length - index}`}
-            </Text>
+            <TouchableOpacity
+              style={styles.titleContainer}
+              onPress={() => openRenameModal(item.taskId, item.name || `${t.model} #${entries.length - index}`)}
+            >
+              <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={1}>
+                {item.name || `${t.model} #${entries.length - index}`}
+              </Text>
+              <Edit2 size={14} color={colors.textTertiary} style={{ marginLeft: 6 }} />
+            </TouchableOpacity>
             <View style={styles.dateRow}>
               <Clock size={12} color={colors.textTertiary} />
               <Text style={[styles.dateText, { color: colors.textTertiary }]}>
@@ -452,6 +481,40 @@ export default function HistoryScreen() {
         ListEmptyComponent={renderEmpty}
         showsVerticalScrollIndicator={false}
       />
+
+      <Modal
+        visible={renameModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRenameModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Modell umbenennen</Text>
+            <TextInput
+              style={[styles.modalInput, { color: colors.text, borderColor: colors.inputBorder, backgroundColor: colors.inputBackground }]}
+              value={renameValue}
+              onChangeText={setRenameValue}
+              autoFocus
+              selectTextOnFocus
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => setRenameModalVisible(false)}
+              >
+                <Text style={{ color: colors.textSecondary, fontWeight: '600' }}>{t.cancel}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, { backgroundColor: colors.accent, borderRadius: 10 }]}
+                onPress={confirmRename}
+              >
+                <Text style={{ color: '#FFF', fontWeight: '700' }}>{t.save}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
