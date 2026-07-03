@@ -51,7 +51,7 @@ export default function HistoryScreen() {
   const getExpirationStatus = (completedAt: string) => {
     const start = new Date(completedAt).getTime();
     const now = new Date().getTime();
-    const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+    const fourteenDaysMs = 365 * 24 * 60 * 60 * 1000;
     const expiryTime = start + fourteenDaysMs;
     const diff = expiryTime - now;
 
@@ -196,34 +196,23 @@ export default function HistoryScreen() {
     const EXPIRATION_MS = 20 * 60 * 60 * 1000; // 20 Stunden
 
     let isLinkValid = false;
-    if (item?.arUrl) {
-      if (!item.arUrlGeneratedAt) {
-        isLinkValid = true; // Fallback für alte Einträge ohne Zeitstempel
-      } else {
-        const generatedAt = new Date(item.arUrlGeneratedAt).getTime();
-        const now = new Date().getTime();
-        if (now - generatedAt < EXPIRATION_MS) {
-          isLinkValid = true;
-        }
+    if (item?.arUrl && item.arUrlGeneratedAt) {
+      const generatedAt = new Date(item.arUrlGeneratedAt).getTime();
+      const now = new Date().getTime();
+      if (now - generatedAt < EXPIRATION_MS) {
+        isLinkValid = true;
       }
     }
 
     if (isLinkValid && item?.arUrl) {
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
-      setTimeout(async () => {
-        try {
-          await Share.share({
-            message: Platform.OS === 'android' ? `${msg}: ${item.arUrl}` : msg,
-            url: item.arUrl
-          });
-        } catch (err) { console.error('Share dialog error:', err); }
-      }, 500);
+      await Share.share({ message: `${msg}: ${item.arUrl}`, url: item.arUrl });
       return;
     }
 
     if (!apiKey) return;
     setUploadingTaskId(taskId);
-    setProcessingTask({ taskId, label: 'Bereite AR vor...', progress: 10 });
+    setProcessingTask({ taskId, label: 'Erneuere GLB-Link...', progress: 10 });
     try {
       const tripoData = await getTripoTaskStatus(apiKey, taskId);
       const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model;
@@ -255,7 +244,7 @@ export default function HistoryScreen() {
         });
       }
 
-      setProcessingTask({ taskId, label: 'Lade Modell hoch...', progress: 80 });
+      setProcessingTask({ taskId, label: 'Lade Modell fuer AR hoch...', progress: 80 });
       const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
         method: 'POST',
         body: formData,
@@ -274,58 +263,36 @@ export default function HistoryScreen() {
 
       setProcessingTask({ taskId, label: 'Oeffne Teilen...', progress: 100 });
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
-      const shareUrl = viewerUrl;
-
-      // Delay auf 500ms und States erst danach aufräumen
-      setTimeout(async () => {
-        try {
-          await Share.share({
-            message: Platform.OS === 'android' ? `${msg}: ${shareUrl}` : msg,
-            url: shareUrl,
-            title: 'Share AR Model',
-          });
-        } catch (err) {
-          console.error('Share dialog error:', err);
-        } finally {
-          setUploadingTaskId(null);
-          setProcessingTask(null);
-        }
-      }, 500);
+      await Share.share({
+        message: `${msg}: ${viewerUrl}`,
+        url: viewerUrl,
+        title: 'Share AR Model',
+      });
     } catch (error) {
       console.error('Sharing error:', error);
       Alert.alert(t.error, 'The model could not be uploaded or shared.');
+    } finally {
       setUploadingTaskId(null);
       setProcessingTask(null);
     }
   }, [apiKey, createLocalGlbFileAsync, t, entries, language, updateEntry]);
 
   const shareToDownload = useCallback(async (taskId: string) => {
-    // 1. Caching-Check: Identisch zum AR Button
+    // 1. Caching-Check: Nur nutzen, wenn Link existiert UND jünger als 20h ist
     const item = entries.find(e => e.taskId === taskId);
     const EXPIRATION_MS = 20 * 60 * 60 * 1000;
 
     let isLinkValid = false;
-    if (item?.glbDownloadUrl) {
-      if (!item.glbDownloadUrlGeneratedAt) {
+    if (item?.glbDownloadUrl && item.glbDownloadUrlGeneratedAt) {
+      const generatedAt = new Date(item.glbDownloadUrlGeneratedAt).getTime();
+      const now = new Date().getTime();
+      if (now - generatedAt < EXPIRATION_MS) {
         isLinkValid = true;
-      } else {
-        const generatedAt = new Date(item.glbDownloadUrlGeneratedAt).getTime();
-        const now = new Date().getTime();
-        if (now - generatedAt < EXPIRATION_MS) {
-          isLinkValid = true;
-        }
       }
     }
 
     if (isLinkValid && item?.glbDownloadUrl) {
-      setTimeout(async () => {
-        try {
-          await Share.share({
-            message: Platform.OS === 'android' ? `Download: ${item.glbDownloadUrl}` : `Download`,
-            url: item.glbDownloadUrl
-          });
-        } catch (err) { console.error('Share dialog error:', err); }
-      }, 500);
+      await Share.share({ message: `Download: ${item.glbDownloadUrl}`, url: item.glbDownloadUrl });
       return;
     }
 
@@ -345,22 +312,21 @@ export default function HistoryScreen() {
 
       const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
       const litterboxUrl = await uploadRes.text();
+
       if (!litterboxUrl.startsWith('http')) throw new Error('Upload failed');
 
       const downloadUrl = `https://skaterdenni-coder.github.io/Snap2ModelDownload/?model=${encodeURIComponent(litterboxUrl.trim())}`;
-      updateEntry(taskId, { glbDownloadUrl: downloadUrl, glbDownloadUrlGeneratedAt: new Date().toISOString() });
 
-      setTimeout(async () => {
-        try {
-          await Share.share({
-            message: Platform.OS === 'android' ? `Download: ${downloadUrl}` : `Download`,
-            url: downloadUrl,
-          });
-        } catch (err) { console.error('Share dialog error:', err); }
-        finally { setUploadingTaskId(null); setProcessingTask(null); }
-      }, 500);
+      updateEntry(taskId, {
+        glbDownloadUrl: downloadUrl,
+        glbDownloadUrlGeneratedAt: new Date().toISOString()
+      });
+
+      await Share.share({ message: `Download: ${downloadUrl}`, url: downloadUrl });
     } catch (error) {
-      Alert.alert(t.error, 'Failed to prepare download link');
+      console.error('Download sharing error:', error);
+      Alert.alert(t.error, 'Failed to prepare download link.');
+    } finally {
       setUploadingTaskId(null);
       setProcessingTask(null);
     }
@@ -451,7 +417,7 @@ export default function HistoryScreen() {
                       overflow: 'hidden',
                     },
                   ]}
-                  onPress={() => downloadFile(item.taskId, format, item.modelHeightMeters)}
+                  onPress={() => format === 'glb' ? shareToDownload(item.taskId) : downloadFile(item.taskId, format, item.modelHeightMeters)}
                   disabled={currentProcessing !== null}
                   activeOpacity={0.7}
                 >
@@ -463,7 +429,7 @@ export default function HistoryScreen() {
                       style={[StyleSheet.absoluteFill, { opacity: 0.15 }]}
                     />
                   )}
-                  <ExternalLink size={12} color={isRainbow ? '#FF6B6B' : colors.accent} />
+                  {format === 'glb' ? <Share2 size={12} color={isRainbow ? '#FF6B6B' : colors.accent} /> : <ExternalLink size={12} color={isRainbow ? '#FF6B6B' : colors.accent} />}
                   <Text style={[styles.chipText, { color: isRainbow ? '#FF6B6B' : colors.accent }]}>
                     {format.toUpperCase()}
                   </Text>
