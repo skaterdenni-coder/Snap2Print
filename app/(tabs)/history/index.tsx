@@ -196,23 +196,34 @@ export default function HistoryScreen() {
     const EXPIRATION_MS = 20 * 60 * 60 * 1000; // 20 Stunden
 
     let isLinkValid = false;
-    if (item?.arUrl && item.arUrlGeneratedAt) {
-      const generatedAt = new Date(item.arUrlGeneratedAt).getTime();
-      const now = new Date().getTime();
-      if (now - generatedAt < EXPIRATION_MS) {
-        isLinkValid = true;
+    if (item?.arUrl) {
+      if (!item.arUrlGeneratedAt) {
+        isLinkValid = true; // Fallback für alte Einträge ohne Zeitstempel
+      } else {
+        const generatedAt = new Date(item.arUrlGeneratedAt).getTime();
+        const now = new Date().getTime();
+        if (now - generatedAt < EXPIRATION_MS) {
+          isLinkValid = true;
+        }
       }
     }
 
     if (isLinkValid && item?.arUrl) {
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
-      await Share.share({ message: `${msg}: ${item.arUrl}`, url: item.arUrl });
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `${msg}: ${item.arUrl}` : msg,
+            url: item.arUrl
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+      }, 500);
       return;
     }
 
     if (!apiKey) return;
     setUploadingTaskId(taskId);
-    setProcessingTask({ taskId, label: 'Erneuere GLB-Link...', progress: 10 });
+    setProcessingTask({ taskId, label: 'Bereite AR vor...', progress: 10 });
     try {
       const tripoData = await getTripoTaskStatus(apiKey, taskId);
       const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model;
@@ -244,7 +255,7 @@ export default function HistoryScreen() {
         });
       }
 
-      setProcessingTask({ taskId, label: 'Lade Modell fuer AR hoch...', progress: 80 });
+      setProcessingTask({ taskId, label: 'Lade Modell hoch...', progress: 80 });
       const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
         method: 'POST',
         body: formData,
@@ -263,19 +274,97 @@ export default function HistoryScreen() {
 
       setProcessingTask({ taskId, label: 'Oeffne Teilen...', progress: 100 });
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
-      await Share.share({
-        message: `${msg}: ${viewerUrl}`,
-        url: viewerUrl,
-        title: 'Share AR Model',
-      });
+      const shareUrl = viewerUrl;
+
+      // Delay auf 500ms und States erst danach aufräumen
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `${msg}: ${shareUrl}` : msg,
+            url: shareUrl,
+            title: 'Share AR Model',
+          });
+        } catch (err) {
+          console.error('Share dialog error:', err);
+        } finally {
+          setUploadingTaskId(null);
+          setProcessingTask(null);
+        }
+      }, 500);
     } catch (error) {
       console.error('Sharing error:', error);
       Alert.alert(t.error, 'The model could not be uploaded or shared.');
-    } finally {
       setUploadingTaskId(null);
       setProcessingTask(null);
     }
   }, [apiKey, createLocalGlbFileAsync, t, entries, language, updateEntry]);
+
+  const shareToDownload = useCallback(async (taskId: string) => {
+    // 1. Caching-Check: Identisch zum AR Button
+    const item = entries.find(e => e.taskId === taskId);
+    const EXPIRATION_MS = 20 * 60 * 60 * 1000;
+
+    let isLinkValid = false;
+    if (item?.glbDownloadUrl) {
+      if (!item.glbDownloadUrlGeneratedAt) {
+        isLinkValid = true;
+      } else {
+        const generatedAt = new Date(item.glbDownloadUrlGeneratedAt).getTime();
+        const now = new Date().getTime();
+        if (now - generatedAt < EXPIRATION_MS) {
+          isLinkValid = true;
+        }
+      }
+    }
+
+    if (isLinkValid && item?.glbDownloadUrl) {
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `Download: ${item.glbDownloadUrl}` : `Download`,
+            url: item.glbDownloadUrl
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+      }, 500);
+      return;
+    }
+
+    if (!apiKey) return;
+    setUploadingTaskId(taskId);
+    setProcessingTask({ taskId, label: 'Bereite Download vor...', progress: 10 });
+    try {
+      const tripoData = await getTripoTaskStatus(apiKey, taskId);
+      const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model;
+      if (!glbUrl) throw new Error('GLB URL not found');
+
+      const formData = new FormData();
+      formData.append('reqtype', 'fileupload');
+      formData.append('time', '24h');
+      // @ts-ignore
+      formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
+
+      const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
+      const litterboxUrl = await uploadRes.text();
+      if (!litterboxUrl.startsWith('http')) throw new Error('Upload failed');
+
+      const downloadUrl = `https://skaterdenni-coder.github.io/Snap2ModelDownload/?model=${encodeURIComponent(litterboxUrl.trim())}`;
+      updateEntry(taskId, { glbDownloadUrl: downloadUrl, glbDownloadUrlGeneratedAt: new Date().toISOString() });
+
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `Download: ${downloadUrl}` : `Download`,
+            url: downloadUrl,
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+        finally { setUploadingTaskId(null); setProcessingTask(null); }
+      }, 500);
+    } catch (error) {
+      Alert.alert(t.error, 'Failed to prepare download link');
+      setUploadingTaskId(null);
+      setProcessingTask(null);
+    }
+  }, [apiKey, t, entries, updateEntry, language]);
 
   const renderItem = useCallback(({ item, index }: { item: HistoryEntry; index: number }) => {
     const expiry = getExpirationStatus(item.completedAt);
