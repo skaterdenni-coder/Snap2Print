@@ -124,7 +124,7 @@ export default function HomeScreen() {
 
     const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
     const litterboxUrl = (await uploadRes.text()).trim();
-    return `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl)}`;
+    return litterboxUrl;
   }, [createLocalGlbFileAsync]);
 
   // Hilfs-Ref, um in den Intervallen auf die aktuellsten Task-Daten zuzugreifen
@@ -192,8 +192,11 @@ export default function HomeScreen() {
 
           // Hintergrund-Upload für AR starten
           if (currentModel?.glb) {
-            uploadToLitterbox(currentModel.glb, completedTask?.modelHeightMeters)
-              .then(arUrl => updateEntry(taskId, { arUrl }))
+             uploadToLitterbox(currentModel.glb, completedTask?.modelHeightMeters)
+              .then(rawUrl => {
+                 const arUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(rawUrl)}`;
+                 updateEntry(taskId, { arUrl, arUrlGeneratedAt: new Date().toISOString() });
+              })
               .catch(err => console.error('[AR] Background upload failed:', err));
           }
 
@@ -347,9 +350,8 @@ export default function HomeScreen() {
   }, [createTaskMutation, buttonScale, images, t]);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string, targetHeightMeters?: number) => {
-    // 1. Caching: Nur nutzen, wenn Link existiert UND jünger als 20h ist
     const existingEntry = entries.find(e => e.taskId === taskId);
-    const EXPIRATION_MS = 20 * 60 * 60 * 1000; // 20 Stunden
+    const EXPIRATION_MS = 20 * 60 * 60 * 1000;
 
     let isLinkValid = false;
     if (existingEntry?.arUrl && existingEntry.arUrlGeneratedAt) {
@@ -362,19 +364,38 @@ export default function HomeScreen() {
 
     if (isLinkValid && existingEntry?.arUrl) {
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
-      await Share.share({ message: `${msg}: ${existingEntry.arUrl}`, url: existingEntry.arUrl });
+      const shareUrl = existingEntry.arUrl;
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `${msg}: ${shareUrl}` : msg,
+            url: shareUrl
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+      }, 500);
       return;
     }
 
     setUploadingTaskId(taskId);
     try {
-      const viewerUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? existingEntry?.modelHeightMeters);
+      const rawUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? existingEntry?.modelHeightMeters);
+      const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(rawUrl)}`;
+
       updateEntry(taskId, { arUrl: viewerUrl, arUrlGeneratedAt: new Date().toISOString() });
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
-      await Share.share({ message: `${msg}: ${viewerUrl}`, url: viewerUrl });
+      const shareUrl = viewerUrl;
+
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `${msg}: ${shareUrl}` : msg,
+            url: shareUrl
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+        finally { setUploadingTaskId(null); }
+      }, 500);
     } catch (e) {
       Alert.alert(t.error, t.uploadFailed);
-    } finally {
       setUploadingTaskId(null);
     }
   }, [t, language, entries, uploadToLitterbox, updateEntry]);
@@ -393,24 +414,40 @@ export default function HomeScreen() {
     }
 
     if (isLinkValid && existingEntry?.glbDownloadUrl) {
-      await Share.share({ message: `Download: ${existingEntry.glbDownloadUrl}`, url: existingEntry.glbDownloadUrl });
+      const shareUrl = existingEntry.glbDownloadUrl;
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `Download: ${shareUrl}` : `Download`,
+            url: shareUrl
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+      }, 500);
       return;
     }
 
     setUploadingTaskId(taskId);
     try {
-      const viewerUrl = await uploadToLitterbox(glbUrl, existingEntry?.modelHeightMeters);
-      const downloadUrl = viewerUrl.replace('/AR-Viewer/', '/Snap2ModelDownload/');
+      const rawUrl = await uploadToLitterbox(glbUrl, existingEntry?.modelHeightMeters);
+      const downloadUrl = `https://skaterdenni-coder.github.io/Snap2ModelDownload/?model=${encodeURIComponent(rawUrl)}`;
 
       updateEntry(taskId, {
         glbDownloadUrl: downloadUrl,
         glbDownloadUrlGeneratedAt: new Date().toISOString()
       });
 
-      await Share.share({ message: `Download: ${downloadUrl}`, url: downloadUrl });
+      const shareUrl = downloadUrl;
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `Download: ${shareUrl}` : `Download`,
+            url: shareUrl
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+        finally { setUploadingTaskId(null); }
+      }, 500);
     } catch (e) {
       Alert.alert(t.error, 'Failed to prepare download link');
-    } finally {
       setUploadingTaskId(null);
     }
   }, [t, entries, uploadToLitterbox, updateEntry]);

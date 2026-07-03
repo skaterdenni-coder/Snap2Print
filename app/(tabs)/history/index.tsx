@@ -51,15 +51,13 @@ export default function HistoryScreen() {
   const getExpirationStatus = (completedAt: string) => {
     const start = new Date(completedAt).getTime();
     const now = new Date().getTime();
-    const fourteenDaysMs = 365 * 24 * 60 * 60 * 1000;
-    const expiryTime = start + fourteenDaysMs;
+    const expiryTime = start + (365 * 24 * 60 * 60 * 1000); // 1 Jahr als Platzhalter
     const diff = expiryTime - now;
 
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
 
     if (diff <= 0) return { label: t.status.expired, color: colors.danger, urgent: true };
-    if (days < 3) return { label: `${days}d ${hours}h ${t.timeLeft}`, color: '#FF9F43', urgent: true };
     return { label: `${days} ${t.daysLeft}`, color: colors.textTertiary, urgent: false };
   };
 
@@ -191,9 +189,8 @@ export default function HistoryScreen() {
   }, [apiKey, createLocalGlbFileAsync, t]);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, targetHeightMeters?: number) => {
-    // 1. Caching-Check: Nur nutzen, wenn Link existiert UND jünger als 20h ist
     const item = entries.find(e => e.taskId === taskId);
-    const EXPIRATION_MS = 20 * 60 * 60 * 1000; // 20 Stunden
+    const EXPIRATION_MS = 20 * 60 * 60 * 1000;
 
     let isLinkValid = false;
     if (item?.arUrl && item.arUrlGeneratedAt) {
@@ -206,79 +203,62 @@ export default function HistoryScreen() {
 
     if (isLinkValid && item?.arUrl) {
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
-      await Share.share({ message: `${msg}: ${item.arUrl}`, url: item.arUrl });
+      const shareUrl = item.arUrl;
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `${msg}: ${shareUrl}` : msg,
+            url: shareUrl
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+      }, 500);
       return;
     }
 
     if (!apiKey) return;
     setUploadingTaskId(taskId);
-    setProcessingTask({ taskId, label: 'Erneuere GLB-Link...', progress: 10 });
+    setProcessingTask({ taskId, label: 'Bereite AR vor...', progress: 10 });
     try {
       const tripoData = await getTripoTaskStatus(apiKey, taskId);
       const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model;
-
       if (!glbUrl) throw new Error('GLB URL not found');
 
       const formData = new FormData();
       formData.append('reqtype', 'fileupload');
       formData.append('time', '24h');
+      // @ts-ignore
+      formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
 
-      if (targetHeightMeters) {
-        if (Platform.OS === 'web') {
-          setProcessingTask({ taskId, label: 'Skaliere GLB-Modell...', progress: 35 });
-          const resizedBlob = await resizeGLB(glbUrl, targetHeightMeters);
-          formData.append('fileToUpload', new File([resizedBlob], 'model.glb', { type: 'model/gltf-binary' }));
-        } else {
-          const fileUri = await createLocalGlbFileAsync(glbUrl, targetHeightMeters, (label, progress) => {
-            setProcessingTask({ taskId, label, progress });
-          });
-          // @ts-ignore
-          formData.append('fileToUpload', { uri: fileUri, name: 'model.glb', type: 'model/gltf-binary' });
-        }
-      } else {
-        // @ts-ignore
-        formData.append('fileToUpload', {
-          uri: glbUrl,
-          name: 'model.glb',
-          type: 'model/gltf-binary',
-        });
-      }
-
-      setProcessingTask({ taskId, label: 'Lade Modell fuer AR hoch...', progress: 80 });
-      const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
-        method: 'POST',
-        body: formData,
-      });
-
+      const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
       const litterboxUrl = await uploadRes.text();
-
-      if (!litterboxUrl.startsWith('http')) {
-        throw new Error('Upload to Litterbox failed');
-      }
+      if (!litterboxUrl.startsWith('http')) throw new Error('Upload failed');
 
       const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl.trim())}`;
-
-      // 2. Link permanent speichern inklusive Zeitstempel
       updateEntry(taskId, { arUrl: viewerUrl, arUrlGeneratedAt: new Date().toISOString() });
 
       setProcessingTask({ taskId, label: 'Oeffne Teilen...', progress: 100 });
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
-      await Share.share({
-        message: `${msg}: ${viewerUrl}`,
-        url: viewerUrl,
-        title: 'Share AR Model',
-      });
+      const shareUrl = viewerUrl;
+
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `${msg}: ${shareUrl}` : msg,
+            url: shareUrl,
+            title: 'Share AR Model',
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+        finally { setUploadingTaskId(null); setProcessingTask(null); }
+      }, 500);
     } catch (error) {
       console.error('Sharing error:', error);
       Alert.alert(t.error, 'The model could not be uploaded or shared.');
-    } finally {
       setUploadingTaskId(null);
       setProcessingTask(null);
     }
   }, [apiKey, createLocalGlbFileAsync, t, entries, language, updateEntry]);
 
   const shareToDownload = useCallback(async (taskId: string) => {
-    // 1. Caching-Check: Nur nutzen, wenn Link existiert UND jünger als 20h ist
     const item = entries.find(e => e.taskId === taskId);
     const EXPIRATION_MS = 20 * 60 * 60 * 1000;
 
@@ -292,7 +272,15 @@ export default function HistoryScreen() {
     }
 
     if (isLinkValid && item?.glbDownloadUrl) {
-      await Share.share({ message: `Download: ${item.glbDownloadUrl}`, url: item.glbDownloadUrl });
+      const shareUrl = item.glbDownloadUrl;
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `Download: ${shareUrl}` : `Download`,
+            url: shareUrl
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+      }, 500);
       return;
     }
 
@@ -312,21 +300,26 @@ export default function HistoryScreen() {
 
       const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
       const litterboxUrl = await uploadRes.text();
-
       if (!litterboxUrl.startsWith('http')) throw new Error('Upload failed');
 
       const downloadUrl = `https://skaterdenni-coder.github.io/Snap2ModelDownload/?model=${encodeURIComponent(litterboxUrl.trim())}`;
+      updateEntry(taskId, { glbDownloadUrl: downloadUrl, glbDownloadUrlGeneratedAt: new Date().toISOString() });
 
-      updateEntry(taskId, {
-        glbDownloadUrl: downloadUrl,
-        glbDownloadUrlGeneratedAt: new Date().toISOString()
-      });
+      setProcessingTask({ taskId, label: 'Oeffne Teilen...', progress: 100 });
+      const shareUrl = downloadUrl;
 
-      await Share.share({ message: `Download: ${downloadUrl}`, url: downloadUrl });
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `Download: ${shareUrl}` : `Download`,
+            url: shareUrl,
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+        finally { setUploadingTaskId(null); setProcessingTask(null); }
+      }, 500);
     } catch (error) {
       console.error('Download sharing error:', error);
       Alert.alert(t.error, 'Failed to prepare download link.');
-    } finally {
       setUploadingTaskId(null);
       setProcessingTask(null);
     }
@@ -342,8 +335,8 @@ export default function HistoryScreen() {
           styles.card,
           {
             backgroundColor: colors.card,
-            borderColor: expiry.urgent ? expiry.color : colors.cardBorder,
-            borderWidth: expiry.urgent ? 1.5 : 1,
+            borderColor: colors.cardBorder,
+            borderWidth: 1,
           },
         ]}
       >
@@ -382,12 +375,6 @@ export default function HistoryScreen() {
               </Text>
             </View>
 
-            <View style={styles.expiryRow}>
-              {expiry.urgent ? <AlertTriangle size={12} color={expiry.color} /> : <Clock size={12} color={expiry.color} />}
-              <Text style={[styles.expiryText, { color: expiry.color, fontWeight: expiry.urgent ? '700' : '500' }]}>
-                {expiry.label}
-              </Text>
-            </View>
             {item.modelHeightMeters && (
               <Text style={[styles.heightText, { color: colors.textSecondary }]}>
                 Hoehe: {item.modelHeightMeters} m
@@ -478,7 +465,7 @@ export default function HistoryScreen() {
         )}
       </View>
     );
-  }, [colors, isRainbow, entries.length, handleRemove, downloadFile, processingTask, uploadingTaskId, shareToLitterboxAndAR, t]);
+  }, [colors, isRainbow, entries.length, handleRemove, downloadFile, processingTask, uploadingTaskId, shareToLitterboxAndAR, shareToDownload, t, language, openRenameModal]);
 
   const renderEmpty = useCallback(() => (
     <View style={styles.emptyContainer}>
@@ -591,10 +578,9 @@ const styles = StyleSheet.create({
   thumbnailPlaceholder: { width: 72, height: 72, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   cardInfo: { flex: 1, gap: 4, paddingTop: 2 },
   cardTitle: { fontSize: 17, fontWeight: '700' },
+  titleContainer: { flexDirection: 'row', alignItems: 'center' },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dateText: { fontSize: 12 },
-  expiryRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  expiryText: { fontSize: 12 },
   heightText: { fontSize: 12, fontWeight: '600' },
   deleteButton: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   downloadRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(150,150,150,0.2)' },
@@ -612,4 +598,42 @@ const styles = StyleSheet.create({
   emptyIconCircle: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   emptyTitle: { fontSize: 20, fontWeight: '700' },
   emptySubtitle: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+    gap: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  modalInput: {
+    height: 50,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    fontSize: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });
