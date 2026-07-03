@@ -18,6 +18,9 @@ export interface HistoryEntry {
     usdz?: string;
   };
   arUrl?: string;
+  arUrlGeneratedAt?: string;
+  glbDownloadUrl?: string;
+  glbDownloadUrlGeneratedAt?: string;
   modelHeightMeters?: number;
   createdAt: string;
   completedAt: string;

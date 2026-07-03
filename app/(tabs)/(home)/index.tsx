@@ -379,6 +379,42 @@ export default function HomeScreen() {
     }
   }, [t, language, entries, uploadToLitterbox, updateEntry]);
 
+  const shareToDownload = useCallback(async (taskId: string, glbUrl: string) => {
+    const existingEntry = entries.find(e => e.taskId === taskId);
+    const EXPIRATION_MS = 20 * 60 * 60 * 1000;
+
+    let isLinkValid = false;
+    if (existingEntry?.glbDownloadUrl && existingEntry.glbDownloadUrlGeneratedAt) {
+      const generatedAt = new Date(existingEntry.glbDownloadUrlGeneratedAt).getTime();
+      const now = new Date().getTime();
+      if (now - generatedAt < EXPIRATION_MS) {
+        isLinkValid = true;
+      }
+    }
+
+    if (isLinkValid && existingEntry?.glbDownloadUrl) {
+      await Share.share({ message: `Download: ${existingEntry.glbDownloadUrl}`, url: existingEntry.glbDownloadUrl });
+      return;
+    }
+
+    setUploadingTaskId(taskId);
+    try {
+      const viewerUrl = await uploadToLitterbox(glbUrl, existingEntry?.modelHeightMeters);
+      const downloadUrl = viewerUrl.replace('/AR-Viewer/', '/Snap2ModelDownload/');
+
+      updateEntry(taskId, {
+        glbDownloadUrl: downloadUrl,
+        glbDownloadUrlGeneratedAt: new Date().toISOString()
+      });
+
+      await Share.share({ message: `Download: ${downloadUrl}`, url: downloadUrl });
+    } catch (e) {
+      Alert.alert(t.error, 'Failed to prepare download link');
+    } finally {
+      setUploadingTaskId(null);
+    }
+  }, [t, entries, uploadToLitterbox, updateEntry]);
+
   const getRainbowColor = (index: number) => rainbowGradient[index % rainbowGradient.length];
 
   const getStatusLabel = (status: string) => {
@@ -496,7 +532,35 @@ export default function HomeScreen() {
                 </View>
                 {task.status === 'SUCCEEDED' && task.modelUrls && (
                   <View style={styles.downloadLinks}>
-                    {task.modelUrls.glb && <TouchableOpacity style={[styles.shareChip, { backgroundColor: colors.success + '15', borderColor: colors.success + '30' }]} onPress={() => task.modelUrls?.glb && shareToLitterboxAndAR(task.id, task.modelUrls.glb, task.modelHeightMeters)} disabled={uploadingTaskId === task.id}>{uploadingTaskId === task.id ? <ActivityIndicator size="small" color={colors.success} /> : <><Share2 size={12} color={colors.success} /><Text style={[styles.shareChipText, { color: colors.success }]}>{t.arShare}</Text></>}</TouchableOpacity>}
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {task.modelUrls.glb && (
+                        <TouchableOpacity
+                          style={[styles.shareChip, { backgroundColor: colors.success + '15', borderColor: colors.success + '30' }]}
+                          onPress={() => task.modelUrls?.glb && shareToLitterboxAndAR(task.id, task.modelUrls.glb, task.modelHeightMeters)}
+                          disabled={uploadingTaskId === task.id}
+                        >
+                          {uploadingTaskId === task.id ? (
+                            <ActivityIndicator size="small" color={colors.success} />
+                          ) : (
+                            <>
+                              <Share2 size={12} color={colors.success} />
+                              <Text style={[styles.shareChipText, { color: colors.success }]}>{t.arShare}</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      )}
+
+                      {task.modelUrls.glb && (
+                        <TouchableOpacity
+                          style={[styles.shareChip, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '30' }]}
+                          onPress={() => task.modelUrls?.glb && shareToDownload(task.taskId, task.modelUrls.glb)}
+                          disabled={uploadingTaskId === task.id}
+                        >
+                          <Share2 size={12} color={colors.accent} />
+                          <Text style={[styles.shareChipText, { color: colors.accent }]}>GLB</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
                 )}
               </View>

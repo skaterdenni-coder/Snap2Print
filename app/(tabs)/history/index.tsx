@@ -51,7 +51,7 @@ export default function HistoryScreen() {
   const getExpirationStatus = (completedAt: string) => {
     const start = new Date(completedAt).getTime();
     const now = new Date().getTime();
-    const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+    const fourteenDaysMs = 365 * 24 * 60 * 60 * 1000;
     const expiryTime = start + fourteenDaysMs;
     const diff = expiryTime - now;
 
@@ -277,6 +277,61 @@ export default function HistoryScreen() {
     }
   }, [apiKey, createLocalGlbFileAsync, t, entries, language, updateEntry]);
 
+  const shareToDownload = useCallback(async (taskId: string) => {
+    // 1. Caching-Check: Nur nutzen, wenn Link existiert UND jünger als 20h ist
+    const item = entries.find(e => e.taskId === taskId);
+    const EXPIRATION_MS = 20 * 60 * 60 * 1000;
+
+    let isLinkValid = false;
+    if (item?.glbDownloadUrl && item.glbDownloadUrlGeneratedAt) {
+      const generatedAt = new Date(item.glbDownloadUrlGeneratedAt).getTime();
+      const now = new Date().getTime();
+      if (now - generatedAt < EXPIRATION_MS) {
+        isLinkValid = true;
+      }
+    }
+
+    if (isLinkValid && item?.glbDownloadUrl) {
+      await Share.share({ message: `Download: ${item.glbDownloadUrl}`, url: item.glbDownloadUrl });
+      return;
+    }
+
+    if (!apiKey) return;
+    setUploadingTaskId(taskId);
+    setProcessingTask({ taskId, label: 'Bereite Download vor...', progress: 10 });
+    try {
+      const tripoData = await getTripoTaskStatus(apiKey, taskId);
+      const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model;
+      if (!glbUrl) throw new Error('GLB URL not found');
+
+      const formData = new FormData();
+      formData.append('reqtype', 'fileupload');
+      formData.append('time', '24h');
+      // @ts-ignore
+      formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
+
+      const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
+      const litterboxUrl = await uploadRes.text();
+
+      if (!litterboxUrl.startsWith('http')) throw new Error('Upload failed');
+
+      const downloadUrl = `https://skaterdenni-coder.github.io/Snap2ModelDownload/?model=${encodeURIComponent(litterboxUrl.trim())}`;
+
+      updateEntry(taskId, {
+        glbDownloadUrl: downloadUrl,
+        glbDownloadUrlGeneratedAt: new Date().toISOString()
+      });
+
+      await Share.share({ message: `Download: ${downloadUrl}`, url: downloadUrl });
+    } catch (error) {
+      console.error('Download sharing error:', error);
+      Alert.alert(t.error, 'Failed to prepare download link.');
+    } finally {
+      setUploadingTaskId(null);
+      setProcessingTask(null);
+    }
+  }, [apiKey, t, entries, updateEntry, language]);
+
   const renderItem = useCallback(({ item, index }: { item: HistoryEntry; index: number }) => {
     const expiry = getExpirationStatus(item.completedAt);
     const currentProcessing = processingTask?.taskId === item.taskId ? processingTask : null;
@@ -362,7 +417,7 @@ export default function HistoryScreen() {
                       overflow: 'hidden',
                     },
                   ]}
-                  onPress={() => downloadFile(item.taskId, format, item.modelHeightMeters)}
+                  onPress={() => format === 'glb' ? shareToDownload(item.taskId) : downloadFile(item.taskId, format, item.modelHeightMeters)}
                   disabled={currentProcessing !== null}
                   activeOpacity={0.7}
                 >
@@ -374,7 +429,7 @@ export default function HistoryScreen() {
                       style={[StyleSheet.absoluteFill, { opacity: 0.15 }]}
                     />
                   )}
-                  <ExternalLink size={12} color={isRainbow ? '#FF6B6B' : colors.accent} />
+                  {format === 'glb' ? <Share2 size={12} color={isRainbow ? '#FF6B6B' : colors.accent} /> : <ExternalLink size={12} color={isRainbow ? '#FF6B6B' : colors.accent} />}
                   <Text style={[styles.chipText, { color: isRainbow ? '#FF6B6B' : colors.accent }]}>
                     {format.toUpperCase()}
                   </Text>
