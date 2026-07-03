@@ -226,9 +226,27 @@ export default function HistoryScreen() {
       const formData = new FormData();
       formData.append('reqtype', 'fileupload');
       formData.append('time', '24h');
-      // @ts-ignore
-      formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
 
+      const scalingHeight = targetHeightMeters ?? item?.modelHeightMeters;
+
+      if (scalingHeight) {
+        if (Platform.OS === 'web') {
+          setProcessingTask({ taskId, label: 'Skaliere GLB-Modell...', progress: 35 });
+          const resizedBlob = await resizeGLB(glbUrl, scalingHeight);
+          formData.append('fileToUpload', new File([resizedBlob], 'model.glb', { type: 'model/gltf-binary' }));
+        } else {
+          const fileUri = await createLocalGlbFileAsync(glbUrl, scalingHeight, (label, progress) => {
+            setProcessingTask({ taskId, label, progress });
+          });
+          // @ts-ignore
+          formData.append('fileToUpload', { uri: fileUri, name: 'model.glb', type: 'model/gltf-binary' });
+        }
+      } else {
+        // @ts-ignore
+        formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
+      }
+
+      setProcessingTask({ taskId, label: 'Lade Modell hoch...', progress: 80 });
       const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
       const litterboxUrl = await uploadRes.text();
       if (!litterboxUrl.startsWith('http')) throw new Error('Upload failed');
@@ -258,7 +276,7 @@ export default function HistoryScreen() {
     }
   }, [apiKey, createLocalGlbFileAsync, t, entries, language, updateEntry]);
 
-  const shareToDownload = useCallback(async (taskId: string) => {
+  const shareToDownload = useCallback(async (taskId: string, targetHeightMeters?: number) => {
     const item = entries.find(e => e.taskId === taskId);
     const EXPIRATION_MS = 20 * 60 * 60 * 1000;
 
@@ -295,9 +313,27 @@ export default function HistoryScreen() {
       const formData = new FormData();
       formData.append('reqtype', 'fileupload');
       formData.append('time', '24h');
-      // @ts-ignore
-      formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
 
+      const scalingHeight = targetHeightMeters ?? item?.modelHeightMeters;
+
+      if (scalingHeight) {
+        if (Platform.OS === 'web') {
+          setProcessingTask({ taskId, label: 'Skaliere GLB-Modell...', progress: 35 });
+          const resizedBlob = await resizeGLB(glbUrl, scalingHeight);
+          formData.append('fileToUpload', new File([resizedBlob], 'model.glb', { type: 'model/gltf-binary' }));
+        } else {
+          const fileUri = await createLocalGlbFileAsync(glbUrl, scalingHeight, (label, progress) => {
+            setProcessingTask({ taskId, label, progress });
+          });
+          // @ts-ignore
+          formData.append('fileToUpload', { uri: fileUri, name: 'model.glb', type: 'model/gltf-binary' });
+        }
+      } else {
+        // @ts-ignore
+        formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
+      }
+
+      setProcessingTask({ taskId, label: 'Lade Modell hoch...', progress: 80 });
       const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
       const litterboxUrl = await uploadRes.text();
       if (!litterboxUrl.startsWith('http')) throw new Error('Upload failed');
@@ -323,7 +359,7 @@ export default function HistoryScreen() {
       setUploadingTaskId(null);
       setProcessingTask(null);
     }
-  }, [apiKey, t, entries, updateEntry, language]);
+  }, [apiKey, createLocalGlbFileAsync, t, entries, language, updateEntry]);
 
   const renderItem = useCallback(({ item, index }: { item: HistoryEntry; index: number }) => {
     const expiry = getExpirationStatus(item.completedAt);
@@ -404,7 +440,7 @@ export default function HistoryScreen() {
                       overflow: 'hidden',
                     },
                   ]}
-                  onPress={() => format === 'glb' ? shareToDownload(item.taskId) : downloadFile(item.taskId, format, item.modelHeightMeters)}
+                  onPress={() => format === 'glb' ? shareToDownload(item.taskId, item.modelHeightMeters) : downloadFile(item.taskId, format, item.modelHeightMeters)}
                   disabled={currentProcessing !== null}
                   activeOpacity={0.7}
                 >
