@@ -216,7 +216,7 @@ export default function HistoryScreen() {
     }
 
     if (!apiKey) return;
-    setUploadingTaskId(taskId);
+    setUploadingTaskId(`${taskId}-ar`);
     setProcessingTask({ taskId, label: 'Bereite AR vor...', progress: 10 });
     try {
       const tripoData = await getTripoTaskStatus(apiKey, taskId);
@@ -303,7 +303,7 @@ export default function HistoryScreen() {
     }
 
     if (!apiKey) return;
-    setUploadingTaskId(taskId);
+    setUploadingTaskId(`${taskId}-glb`);
     setProcessingTask({ taskId, label: 'Bereite Download vor...', progress: 10 });
     try {
       const tripoData = await getTripoTaskStatus(apiKey, taskId);
@@ -441,7 +441,7 @@ export default function HistoryScreen() {
                     },
                   ]}
                   onPress={() => format === 'glb' ? shareToDownload(item.taskId, item.modelHeightMeters) : downloadFile(item.taskId, format, item.modelHeightMeters)}
-                  disabled={currentProcessing !== null}
+                  disabled={currentProcessing !== null || uploadingTaskId === `${item.taskId}-${format}`}
                   activeOpacity={0.7}
                 >
                   {isRainbow && (
@@ -452,10 +452,16 @@ export default function HistoryScreen() {
                       style={[StyleSheet.absoluteFill, { opacity: 0.15 }]}
                     />
                   )}
-                  {format === 'glb' ? <Share2 size={12} color={isRainbow ? '#FF6B6B' : colors.accent} /> : <ExternalLink size={12} color={isRainbow ? '#FF6B6B' : colors.accent} />}
-                  <Text style={[styles.chipText, { color: isRainbow ? '#FF6B6B' : colors.accent }]}>
-                    {format.toUpperCase()}
-                  </Text>
+                  {uploadingTaskId === `${item.taskId}-${format}` ? (
+                    <ActivityIndicator size="small" color={isRainbow ? '#FF6B6B' : colors.accent} />
+                  ) : (
+                    <>
+                      {format === 'glb' ? <Share2 size={12} color={isRainbow ? '#FF6B6B' : colors.accent} /> : <ExternalLink size={12} color={isRainbow ? '#FF6B6B' : colors.accent} />}
+                      <Text style={[styles.chipText, { color: isRainbow ? '#FF6B6B' : colors.accent }]}>
+                        {format.toUpperCase()}
+                      </Text>
+                    </>
+                  )}
                 </TouchableOpacity>
               ) : null,
             )}
@@ -469,9 +475,9 @@ export default function HistoryScreen() {
                   },
                 ]}
                 onPress={() => shareToLitterboxAndAR(item.taskId, item.modelHeightMeters)}
-                disabled={uploadingTaskId === item.taskId || currentProcessing !== null}
+                disabled={uploadingTaskId === `${item.taskId}-ar` || currentProcessing !== null}
               >
-                {uploadingTaskId === item.taskId ? (
+                {uploadingTaskId === `${item.taskId}-ar` ? (
                   <ActivityIndicator size="small" color={colors.success} />
                 ) : (
                   <>

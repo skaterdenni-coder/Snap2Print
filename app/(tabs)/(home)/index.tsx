@@ -376,7 +376,7 @@ export default function HomeScreen() {
       return;
     }
 
-    setUploadingTaskId(taskId);
+    setUploadingTaskId(`${taskId}-ar`);
     try {
       const rawUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? existingEntry?.modelHeightMeters);
       const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(rawUrl)}`;
@@ -426,7 +426,7 @@ export default function HomeScreen() {
       return;
     }
 
-    setUploadingTaskId(taskId);
+    setUploadingTaskId(`${taskId}-glb`);
     try {
       const rawUrl = await uploadToLitterbox(glbUrl, existingEntry?.modelHeightMeters);
       const downloadUrl = `https://skaterdenni-coder.github.io/Snap2ModelDownload/?model=${encodeURIComponent(rawUrl)}`;
@@ -574,9 +574,9 @@ export default function HomeScreen() {
                         <TouchableOpacity
                           style={[styles.shareChip, { backgroundColor: colors.success + '15', borderColor: colors.success + '30' }]}
                           onPress={() => task.modelUrls?.glb && shareToLitterboxAndAR(task.id, task.modelUrls.glb, task.modelHeightMeters)}
-                          disabled={uploadingTaskId === task.id}
+                          disabled={uploadingTaskId === `${task.id}-ar`}
                         >
-                          {uploadingTaskId === task.id ? (
+                          {uploadingTaskId === `${task.id}-ar` ? (
                             <ActivityIndicator size="small" color={colors.success} />
                           ) : (
                             <>
@@ -591,10 +591,16 @@ export default function HomeScreen() {
                         <TouchableOpacity
                           style={[styles.shareChip, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '30' }]}
                           onPress={() => task.modelUrls?.glb && shareToDownload(task.taskId, task.modelUrls.glb)}
-                          disabled={uploadingTaskId === task.id}
+                          disabled={uploadingTaskId === `${task.id}-glb`}
                         >
-                          <Share2 size={12} color={colors.accent} />
-                          <Text style={[styles.shareChipText, { color: colors.accent }]}>GLB</Text>
+                          {uploadingTaskId === `${task.id}-glb` ? (
+                            <ActivityIndicator size="small" color={colors.accent} />
+                          ) : (
+                            <>
+                              <Share2 size={12} color={colors.accent} />
+                              <Text style={[styles.shareChipText, { color: colors.accent }]}>GLB</Text>
+                            </>
+                          )}
                         </TouchableOpacity>
                       )}
                     </View>
