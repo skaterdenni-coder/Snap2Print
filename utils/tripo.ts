@@ -143,7 +143,7 @@ export async function createTripoTask(
       texture: true,
       pbr: true,
       texture_quality: quality === 'fast' ? 'standard' : quality === 'detailed' ? 'detailed' : 'extreme',
-      face_limit: quality === 'fast' ? 200000 : quality === 'detailed' ? 500000 : 1000000,
+      face_limit: quality === 'fast' ? 200000 : quality === 'detailed' ? 750000 : 1300000,
       geometry_quality: 'standard',
       texture_alignment: 'original_image',
       orientation: 'align_image',
