@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-const TRIPO_BASE_URL = 'https://api.tripo3d.ai/v2/openapi';
+const TRIPO_BASE_URL = ' https://openapi.tripo3d.ai/v3';
 
 export interface TripoTask {
   task_id: string;
@@ -163,7 +163,7 @@ export async function createTripoTask(
     face_limit: quality === 'fast' ? 750000 : 200000,
     texture: true,
     pbr: true,
-    texture_quality: quality === 'fast' ? 'detailed' : 'detailed',
+    texture_quality: quality === 'fast' ? 'detailed' : 'extreme',
     geometry_quality: 'standard',
     texture_alignment: 'original_image',
     orientation: 'align_image',
