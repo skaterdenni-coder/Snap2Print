@@ -325,9 +325,9 @@ export default function SettingsScreen() {
             </View>
 
             <View style={styles.themeGrid}>
-              {(['fast', 'detailed'] as const).map((q) => {
+              {(['fast', 'detailed', 'extreme'] as const).map((q) => {
                 const isActive = qualityMode === q;
-                const Icon = q === 'fast' ? Zap : Sparkles;
+                const Icon = q === 'fast' ? Zap : q === 'detailed' ? Sparkles : Sparkles; // Might want another icon for extreme
                 return (
                   <TouchableOpacity
                     key={q}
@@ -345,14 +345,23 @@ export default function SettingsScreen() {
                     }}
                     activeOpacity={0.7}
                   >
-                    <Icon size={22} color={isActive ? colors.accent : colors.textSecondary} />
+                    {q === 'extreme' && isActive ? (
+                      <LinearGradient
+                        colors={rainbowGradient}
+                        style={styles.themeIconGradient}
+                      >
+                        <Icon size={22} color="#FFF" />
+                      </LinearGradient>
+                    ) : (
+                      <Icon size={22} color={isActive ? colors.accent : colors.textSecondary} />
+                    )}
                     <Text
                       style={[
                         styles.themeLabel,
-                        { color: isActive ? colors.accent : colors.textSecondary, fontSize: 16 },
+                        { color: isActive ? colors.accent : colors.textSecondary, fontSize: 13 },
                       ]}
                     >
-                      {q === 'fast' ? 'Fast' : 'Detailed'}
+                      {q === 'fast' ? 'Fast' : q === 'detailed' ? 'Detailed' : '8K (Extreme)'}
                     </Text>
                     {isActive && (
                       <View style={[styles.activeIndicator, { backgroundColor: colors.accent }]}>

@@ -9,8 +9,10 @@ export interface TripoTask {
   progress: number;
   output?: {
     model?: string;
+    model_url?: string;
     pbr_model?: string;
     rendered_image?: string;
+    rendered_image_url?: string;
     [key: string]: any;
   };
   input?: any;
@@ -104,15 +106,14 @@ async function uploadToTripo(apiKey: string, uri: string): Promise<string> {
     type: type,
   });
 
-  const response = await fetch(`${TRIPO_BASE_URL}/upload`, {
+  const response = await fetch(`${TRIPO_BASE_URL}/files`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey.trim()}` },
     body: formData,
   });
 
   const data = await safeParseJson(response);
-  if (data.code !== 0) throw new Error(data.message);
-  return data.data.image_token || data.data.file_token;
+  return data.data.file_token;
 }
 
 /**
@@ -121,7 +122,7 @@ async function uploadToTripo(apiKey: string, uri: string): Promise<string> {
 export async function createTripoTask(
   apiKey: string,
   imageUris: (string | null)[],
-  quality: 'fast' | 'detailed' = 'detailed'
+  quality: 'fast' | 'detailed' | 'extreme' = 'detailed'
 ): Promise<{ taskId: string; tokens: string[] }> {
   const validUris = imageUris.filter((u): u is string => u !== null);
   const isSingleView = validUris.length === 1;
@@ -135,42 +136,35 @@ export async function createTripoTask(
 
   const validTokens = tokens.filter((t): t is string => t !== null);
 
-  let body: any;
+  let endpoint: string;
+  let body: any = {
+    model: 'v3.1-20260211',
+    parameters: {
+      texture: true,
+      pbr: true,
+      texture_quality: quality === 'fast' ? 'standard' : quality === 'detailed' ? 'detailed' : 'extreme',
+      face_limit: quality === 'fast' ? 200000 : quality === 'detailed' ? 500000 : 1000000,
+      geometry_quality: 'standard',
+      texture_alignment: 'original_image',
+      orientation: 'align_image',
+      orthographic_projection: false
+    }
+  };
 
   if (isSingleView) {
-    body = {
-      type: 'image_to_model',
-      model_version: 'v3.1-20260211',
-      file: {
-        type: 'jpg',
-        file_token: validTokens[0]
-      }
+    endpoint = `${TRIPO_BASE_URL}/generation/image-to-model`;
+    body.file = {
+      type: 'jpg',
+      file_token: validTokens[0]
     };
   } else {
+    endpoint = `${TRIPO_BASE_URL}/generation/multiview-to-model`;
     // Tripo Multiview Reihenfolge: Front, Left, Back, Right (0, 1, 3, 2)
     const tripoOrder = [tokens[0], tokens[1], tokens[3], tokens[2]];
-    const files = tripoOrder.map(token => token ? { type: 'jpg', file_token: token } : {});
-
-    body = {
-      type: 'multiview_to_model',
-      model_version: 'v3.1-20260211',
-      files: files,
-    };
+    body.files = tripoOrder.map(token => token ? { type: 'jpg', file_token: token } : {});
   }
 
-  // Parameter hinzufügen
-  Object.assign(body, {
-    face_limit: quality === 'fast' ? 750000 : 200000,
-    texture: true,
-    pbr: true,
-    texture_quality: quality === 'fast' ? 'detailed' : 'extreme',
-    geometry_quality: 'standard',
-    texture_alignment: 'original_image',
-    orientation: 'align_image',
-    orthographic_projection: false
-  });
-
-  const response = await fetch(`${TRIPO_BASE_URL}/task`, {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey.trim()}`,
@@ -180,7 +174,6 @@ export async function createTripoTask(
   });
 
   const data = await safeParseJson(response);
-  if (data.code !== 0) throw new Error(data.message);
 
   return { taskId: data.data.task_id, tokens: validTokens };
 }
@@ -193,16 +186,14 @@ export async function createTripoRefineTask(
   apiKey: string,
   draftTaskId: string,
   imageTokens: string[],
-  quality: 'fast' | 'detailed' = 'detailed'
+  quality: 'fast' | 'detailed' | 'extreme' = 'detailed'
 ): Promise<string> {
   console.log('[Tripo] Starte Refine Task (v3.0) mit Bild-Referenzen');
 
   const body = {
-    type: 'texture_model',
-    model_version: quality === 'fast' ? 'v3.0-20250812' : 'v3.0-20250812', // Gleiche Version, andere Parameter
+    model: 'v3.0-20250812',
     original_model_task_id: draftTaskId,
     texture_prompt: {
-      // WICHTIG: Die Bilder-Tokens sorgen für das scharfe Kennzeichen
       images: imageTokens.map(token => ({
         file: {
           type: 'jpg',
@@ -210,14 +201,16 @@ export async function createTripoRefineTask(
         }
       }))
     },
-    texture: true,
-    pbr: true,
-    texture_quality: quality === 'fast' ? 'detailed' : 'extreme', // 4K Upscale nur bei detailed
-    texture_alignment: 'original_image',
-    bake: true
+    parameters: {
+      texture: true,
+      pbr: true,
+      texture_quality: quality === 'fast' ? 'standard' : quality === 'detailed' ? 'detailed' : 'extreme',
+      texture_alignment: 'original_image',
+      bake: true
+    }
   };
 
-  const response = await fetch(`${TRIPO_BASE_URL}/task`, {
+  const response = await fetch(`${TRIPO_BASE_URL}/models/texture`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey.trim()}`,
@@ -227,12 +220,11 @@ export async function createTripoRefineTask(
   });
 
   const data = await safeParseJson(response);
-  if (data.code !== 0) throw new Error(data.message);
   return data.data.task_id;
 }
 
 export async function getTripoTaskStatus(apiKey: string, taskId: string): Promise<TripoTask> {
-  const response = await fetch(`${TRIPO_BASE_URL}/task/${taskId}`, {
+  const response = await fetch(`${TRIPO_BASE_URL}/tasks/${taskId}`, {
     headers: { 'Authorization': `Bearer ${apiKey.trim()}` },
   });
   const data = await safeParseJson(response);

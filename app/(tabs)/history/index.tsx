@@ -137,7 +137,9 @@ export default function HistoryScreen() {
     setProcessingTask({ taskId, label: 'Erneuere Download-Link...', progress: 10 });
     try {
       const tripoData = await getTripoTaskStatus(apiKey, taskId);
-      const url = format === 'glb' ? tripoData.output?.pbr_model || tripoData.output?.model : tripoData.output?.[format.toLowerCase()];
+      const url = format === 'glb'
+        ? (tripoData.output?.pbr_model || tripoData.output?.model_url || tripoData.output?.model)
+        : (tripoData.output?.[format.toLowerCase()] || tripoData.output?.[`${format.toLowerCase()}_url`]);
 
       if (!url) {
         throw new Error('Download link could not be renewed');
@@ -220,7 +222,7 @@ export default function HistoryScreen() {
     setProcessingTask({ taskId, label: 'Bereite AR vor...', progress: 10 });
     try {
       const tripoData = await getTripoTaskStatus(apiKey, taskId);
-      const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model;
+      const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model_url || tripoData.output?.model;
       if (!glbUrl) throw new Error('GLB URL not found');
 
       const formData = new FormData();
@@ -307,7 +309,7 @@ export default function HistoryScreen() {
     setProcessingTask({ taskId, label: 'Bereite Download vor...', progress: 10 });
     try {
       const tripoData = await getTripoTaskStatus(apiKey, taskId);
-      const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model;
+      const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model_url || tripoData.output?.model;
       if (!glbUrl) throw new Error('GLB URL not found');
 
       const formData = new FormData();

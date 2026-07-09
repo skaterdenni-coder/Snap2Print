@@ -5,7 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 const API_KEY_STORAGE = 'tripo_api_key';
 const QUALITY_MODE_STORAGE = 'quality_mode';
 
-export type QualityMode = 'fast' | 'detailed';
+export type QualityMode = 'fast' | 'detailed' | 'extreme';
 
 export const [SettingsProvider, useSettings] = createContextHook(() => {
   const [apiKey, setApiKeyState] = useState<string>('');
@@ -18,8 +18,8 @@ export const [SettingsProvider, useSettings] = createContextHook(() => {
       SecureStore.getItemAsync(QUALITY_MODE_STORAGE)
     ]).then(([storedKey, storedMode]) => {
       if (storedKey) setApiKeyState(storedKey);
-      if (storedMode === 'fast' || storedMode === 'detailed') {
-        setQualityModeState(storedMode);
+      if (storedMode === 'fast' || storedMode === 'detailed' || storedMode === 'extreme') {
+        setQualityModeState(storedMode as QualityMode);
       }
       setIsLoaded(true);
     });

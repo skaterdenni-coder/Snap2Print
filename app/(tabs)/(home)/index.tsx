@@ -144,10 +144,9 @@ export default function HomeScreen() {
 
         const mappedStatus = mapTripoStatus(tripoData.status);
         const currentProgress = tripoData.progress;
-        const currentThumb = tripoData.output?.rendered_image;
-        const currentModel = tripoData.output?.pbr_model || tripoData.output?.model
-          ? { glb: tripoData.output.pbr_model || tripoData.output.model }
-          : undefined;
+        const currentThumb = tripoData.output?.rendered_image_url || tripoData.output?.rendered_image;
+        const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model_url || tripoData.output?.model;
+        const currentModel = glbUrl ? { glb: glbUrl } : undefined;
 
         setTasks((prev) => prev.map((t) => t.taskId === taskId ? {
           ...t,
