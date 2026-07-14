@@ -1,50 +1,54 @@
-# Snap2XR 2D zu 3D Anwendung
+# Snap2XR 🚀
 
-**Snap2XR** ist eine leistungsstarke mobile Anwendung, die mithilfe von KI-Technologie 2D-Fotos in hochwertige 3D-Modelle verwandelt und diese sofort für Augmented Reality (AR) bereitstellt.
+**Snap2XR** transforms 2D photos into high-quality 3D models using AI and makes them instantly accessible for Augmented Reality (AR).
+
+[Deutschsprachige Version unten](#de-snap2xr-2d-zu-3d-anwendung)
+
+---
+
+## 🌟 Key Features
+
+- **AI 3D Generation**: Powered by the Tripo AI Engine to create detailed 3D assets.
+- **Dual Workflow**:
+    - **Single-View Mode**: Generate models from one photo for quick results.
+    - **Multiview Mode**: Use 4 perspectives (Front, Left, Right, Back) for maximum precision.
+- **AR Viewer Integration**: Instant AR preview via a custom web viewer.
+- **Flexible Hosting**: Seamlessly uploads models to cloud services (like PixelDrain or Litterbox) for instant sharing.
+- **Smart History**: Local storage for all your models, including thumbnails and automatic object naming.
+- **Modern UI**: Adaptive design with Light, Dark, and a special Rainbow mode.
+
+## 🤖 Hidden Features
+- **Extreme Quality**: Advanced users can unlock a secret quality selector to generate **8K (Extreme)** textures for ultra-high fidelity models.
+
+## 🛠 Tech Stack
+- React Native / Expo (TypeScript)
+- Tripo AI V3 OpenAPI
+- PixelDrain & Litterbox Integration
+
+---
+
+# DE: Snap2XR 2D zu 3D Anwendung
+
+**Snap2XR** verwandelt 2D-Fotos mithilfe von KI in hochwertige 3D-Modelle, die sofort in Augmented Reality (AR) erlebt werden können.
 
 ## ✨ Hauptmerkmale
 
-- **KI-gestützte 3D-Generierung**: Nutzt die Tripo AI Engine für die blitzschnelle Erstellung von 3D-Modellen aus Fotos.
+- **KI-3D-Generierung**: Nutzt die Tripo AI Engine für detaillierte 3D-Objekte.
 - **Flexibler Workflow**:
-    - **Single-View**: Erstelle ein Modell aus nur einem einzigen Foto (Ideal für schnelle Entwürfe).
-    - **Multiview**: Nutze bis zu 4 Perspektiven (Vorne, Links, Rechts, Hinten) für hochpräzise Ergebnisse.
-- **Intelligente Benennung**: 
-    - Automatische Erkennung von Objekten durch Tripo AI Tags.
-    - Fallback auf Zeitstempel-Format (z.B. "Modell 24.05. 14:30") für eine übersichtliche Historie.
-- **Persistente Historie**: Deine erstellten Modelle werden lokal gespeichert und sind jederzeit wieder abrufbar.
-- **One-Click AR Sharing**:
-    - Schneller Upload zu Cloud-Speicherdiensten.
-    - Sofortige AR-Vorschau für Android (Scene Viewer) und iOS (Quick Look).
-- **Hintergrund-Synchronisation**: Aufgaben laufen weiter, auch wenn die App minimiert wird.
+    - **Single-View**: Erstellung aus nur einem Bild für schnelle Entwürfe.
+    - **Multiview**: Nutzung von 4 Perspektiven (Vorne, Links, Rechts, Hinten) für höchste Präzision.
+- **AR-Integration**: Direkte AR-Vorschau über einen spezialisierten Web-Viewer.
+- **Cloud-Hosting**: Automatischer Upload zu Diensten wie PixelDrain oder Litterbox für schnelles Teilen.
+- **Lokale Historie**: Speichert alle Modelle inkl. Vorschaubildern und automatischer Benennung.
+- **Adaptives Design**: Modernes UI mit Hell-, Dunkel- und speziellem Regenbogen-Modus.
 
-## 🤖 API & Logik
+## 🤖 Geheime Funktionen
+- **Extreme Qualität**: Über einen versteckten Schalter lässt sich die **8K (Extreme)** Textur-Generierung für maximale Detailtiefe aktivieren.
 
-Die App implementiert den neuesten **Tripo OpenAPI** Standard:
-
-1.  **Bild-Upload**: Optimierter Upload-Prozess für maximale Stabilität und geringen Datenverbrauch.
-2.  **Task-Management**: Intelligente Unterscheidung zwischen `image_to_model` (Single-View) und `multiview_to_model` (Multiview).
-3.  **Status-Polling**: Echtzeit-Überwachung des Fortschritts mit visueller Rückmeldung für den Nutzer.
-
-## 🛠 Technologien
-
-- **Framework**: React Native mit Expo (TypeScript)
-- **Design**: Modernes UI-System mit adaptiven Themes (Hell, Dunkel & Rainbow-Mode)
-- **State Management**: Zustand & TanStack Query
-- **Storage**: AsyncStorage für die Historie & Expo SecureStore für sensible API-Keys
-- **Icons**: Lucide React Native
-
-## 🚀 Installation & Start
-
-1.  **Dependencies installieren**:
-    ```sh
-    bun install
-    ```
-2.  **API Key konfigurieren**:
-    Trage deinen API-Key von [tripo3d.ai](https://www.tripo3d.ai/) in den App-Einstellungen ein.
-3.  **App starten**:
-    ```sh
-    bun start
-    ```
+## 🚀 Setup
+1. `bun install` oder `npm install`
+2. `npx expo start`
+3. Tripo API-Key in den Einstellungen hinterlegen.
 
 ---
-*Snap2XR - Die Brücke zwischen Fotografie und Augmented Reality.*
+*Created by Dennis Werner 2026*
