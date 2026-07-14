@@ -13,7 +13,7 @@
     - **Single-View Mode**: Generate models from one photo for quick results.
     - **Multiview Mode**: Use 4 perspectives (Front, Left, Right, Back) for maximum precision.
 - **AR Viewer Integration**: Instant AR preview via a custom web viewer.
-- **Flexible Hosting**: Seamlessly uploads models to cloud services (like PixelDrain or Litterbox) for instant sharing.
+- **Cloud Hosting**: Seamlessly uploads models to storage services (like Litterbox) for instant sharing.
 - **Smart History**: Local storage for all your models, including thumbnails and automatic object naming.
 - **Modern UI**: Adaptive design with Light, Dark, and a special Rainbow mode.
 
@@ -23,7 +23,6 @@
 ## 🛠 Tech Stack
 - React Native / Expo (TypeScript)
 - Tripo AI V3 OpenAPI
-- PixelDrain & Litterbox Integration
 
 ---
 
@@ -38,7 +37,7 @@
     - **Single-View**: Erstellung aus nur einem Bild für schnelle Entwürfe.
     - **Multiview**: Nutzung von 4 Perspektiven (Vorne, Links, Rechts, Hinten) für höchste Präzision.
 - **AR-Integration**: Direkte AR-Vorschau über einen spezialisierten Web-Viewer.
-- **Cloud-Hosting**: Automatischer Upload zu Diensten wie PixelDrain oder Litterbox für schnelles Teilen.
+- **Cloud-Hosting**: Automatischer Upload zu Diensten (wie Litterbox) für schnelles Teilen.
 - **Lokale Historie**: Speichert alle Modelle inkl. Vorschaubildern und automatischer Benennung.
 - **Adaptives Design**: Modernes UI mit Hell-, Dunkel- und speziellem Regenbogen-Modus.
 
