@@ -16,9 +16,7 @@
 - **Cloud Hosting**: Seamlessly uploads models to storage services (like Litterbox) for instant sharing.
 - **Smart History**: Local storage for all your models, including thumbnails and automatic object naming.
 - **Modern UI**: Adaptive design with Light, Dark
-
-## 🤖 Hidden Features
-- **Extreme Quality**: Advanced users can unlock a secret quality selector to generate **8K (Extreme)** textures for ultra-high fidelity models.
+- **Extreme Quality**: users can unlock a quality selector to generate **8K (Extreme)** textures for ultra-high fidelity models.
 
 ## 🛠 Tech Stack
 - React Native / Expo (TypeScript)
@@ -40,9 +38,7 @@
 - **Cloud-Hosting**: Automatischer Upload zu Diensten (wie Litterbox) für schnelles Teilen.
 - **Lokale Historie**: Speichert alle Modelle inkl. Vorschaubildern und automatischer Benennung.
 - **Adaptives Design**: Modernes UI mit Hell-, Dunkelmodus
-
-## 🤖 Geheime Funktionen
-- **Extreme Qualität**: Über einen versteckten Schalter lässt sich die **8K (Extreme)** Textur-Generierung für maximale Detailtiefe aktivieren.
+- **Extreme Qualität**: Über einen Schalter lässt sich die **8K (Extreme)** Textur-Generierung für maximale Detailtiefe aktivieren.
 
 ## 🚀 Setup
 1. `bun install` oder `npm install`
