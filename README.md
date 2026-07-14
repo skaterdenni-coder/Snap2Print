@@ -15,7 +15,7 @@
 - **AR Viewer Integration**: Instant AR preview via a custom web viewer.
 - **Cloud Hosting**: Seamlessly uploads models to storage services (like Litterbox) for instant sharing.
 - **Smart History**: Local storage for all your models, including thumbnails and automatic object naming.
-- **Modern UI**: Adaptive design with Light, Dark, and a special Rainbow mode.
+- **Modern UI**: Adaptive design with Light, Dark
 
 ## 🤖 Hidden Features
 - **Extreme Quality**: Advanced users can unlock a secret quality selector to generate **8K (Extreme)** textures for ultra-high fidelity models.
@@ -39,7 +39,7 @@
 - **AR-Integration**: Direkte AR-Vorschau über einen spezialisierten Web-Viewer.
 - **Cloud-Hosting**: Automatischer Upload zu Diensten (wie Litterbox) für schnelles Teilen.
 - **Lokale Historie**: Speichert alle Modelle inkl. Vorschaubildern und automatischer Benennung.
-- **Adaptives Design**: Modernes UI mit Hell-, Dunkel- und speziellem Regenbogen-Modus.
+- **Adaptives Design**: Modernes UI mit Hell-, Dunkelmodus
 
 ## 🤖 Geheime Funktionen
 - **Extreme Qualität**: Über einen versteckten Schalter lässt sich die **8K (Extreme)** Textur-Generierung für maximale Detailtiefe aktivieren.
