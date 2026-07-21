@@ -25,6 +25,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { createTripoTask, getTripoTaskStatus, mapTripoStatus, createTripoRefineTask, imageUriToBase64DataUrl, TripoApiError } from '@/utils/tripo';
 import { rainbowGradient } from '@/constants/colors';
 import { useHistory } from '@/contexts/HistoryContext';
+import { uploadToLitterbox } from '@/utils/FileSharing';
 import { resizeGLB, resizeGLBToBytes } from '@/utils/modelResizer';
 
 interface SelectedImage {
@@ -102,30 +103,6 @@ export default function HomeScreen() {
     file.write(bytes);
     return file.uri;
   }, []);
-
-  const uploadToLitterbox = useCallback(async (glbUrl: string, targetHeightMeters?: number): Promise<string> => {
-    const formData = new FormData();
-    formData.append('reqtype', 'fileupload');
-    formData.append('time', '72h');
-
-    if (targetHeightMeters) {
-      if (Platform.OS === 'web') {
-        const resizedBlob = await resizeGLB(glbUrl, targetHeightMeters);
-        formData.append('fileToUpload', new File([resizedBlob], 'model.glb', { type: 'model/gltf-binary' }));
-      } else {
-        const fileUri = await createLocalGlbFileAsync(glbUrl, targetHeightMeters);
-        // @ts-ignore React Native accepts file descriptors in FormData.
-        formData.append('fileToUpload', { uri: fileUri, name: 'model.glb', type: 'model/gltf-binary' });
-      }
-    } else {
-      // @ts-ignore React Native accepts file descriptors in FormData.
-      formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
-    }
-
-    const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
-    const litterboxUrl = (await uploadRes.text()).trim();
-    return litterboxUrl;
-  }, [createLocalGlbFileAsync]);
 
   // Hilfs-Ref, um in den Intervallen auf die aktuellsten Task-Daten zuzugreifen
   const tasksRef = useRef<TaskEntry[]>([]);

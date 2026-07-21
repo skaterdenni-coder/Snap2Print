@@ -10,16 +10,20 @@ import {
   Animated,
   Platform,
   Linking,
+  Modal,
+  ActivityIndicator,
   Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield, Languages, HelpCircle, Zap, Sparkles } from 'lucide-react-native';
+import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield, Languages, HelpCircle, Zap, Sparkles, Share2, RefreshCw, X } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings, QualityMode } from '@/contexts/SettingsContext';
 import { useLanguage, Language } from '@/contexts/LanguageContext';
 import { useHistory } from '@/contexts/HistoryContext';
+import { getTripoTaskStatus } from '@/utils/tripo';
+import { uploadToLitterbox } from '@/utils/FileSharing';
 import { ThemeMode, rainbowGradient } from '@/constants/colors';
 
 const THEME_OPTIONS: { mode: ThemeMode; icon: typeof Sun }[] = [
@@ -32,13 +36,16 @@ export default function SettingsScreen() {
   const { colors, mode, setThemeMode } = useTheme();
   const { apiKey, setApiKey, qualityMode, setQualityMode } = useSettings();
   const { language, setLanguage, t } = useLanguage();
-  const { entries } = useHistory();
+  const { entries, updateEntry } = useHistory();
   const insets = useSafeAreaInsets();
   const [keyInput, setKeyInput] = useState<string>(apiKey);
   const [showKey, setShowKey] = useState<boolean>(false);
   const [saved, setSaved] = useState<boolean>(false);
   const [darkClicks, setDarkClicks] = useState<number>(0);
   const [deTaps, setDeTaps] = useState<number>(0);
+  const [isSecretMenuVisible, setIsSecretMenuVisible] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0, label: '' });
   const [langSwitches, setLangSwitches] = useState<number>(0);
   const [lastLang, setLastLang] = useState<Language>(language);
   const [isRainbowUnlocked, setIsRainbowUnlocked] = useState<boolean>(mode === 'rainbow');
@@ -78,21 +85,16 @@ export default function SettingsScreen() {
     setThemeMode(newMode);
   };
 
-  const handleSecretShare = useCallback(async () => {
+  const handleSecretExport = async () => {
     const validEntries = entries.filter(e => e.arUrl || e.glbDownloadUrl);
     if (validEntries.length === 0) {
       Alert.alert(t.error, language === 'de' ? 'Keine Links zum Teilen gefunden.' : 'No links found to share.');
       return;
     }
 
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-
-    let shareText = language === 'de' ? 'Hier sind meine 3D-Modelle:\n\n' : 'Here are my 3D models:\n\n';
-    validEntries.forEach((e) => {
-      const index = entries.indexOf(e);
-      const name = e.name || `${t.model} #${entries.length - index}`;
+    let shareText = language === 'de' ? 'Meine 3D-Modelle:\n\n' : 'My 3D models:\n\n';
+    validEntries.forEach((e, idx) => {
+      const name = e.name || `${t.model} #${entries.length - idx}`;
       shareText += `• ${name}:\n`;
       if (e.arUrl) shareText += `  AR: ${e.arUrl}\n`;
       if (e.glbDownloadUrl) shareText += `  Download: ${e.glbDownloadUrl}\n`;
@@ -100,14 +102,52 @@ export default function SettingsScreen() {
     });
 
     try {
-      await Share.share({
-        message: shareText,
-        title: language === 'de' ? 'Alle Modelle teilen' : 'Share all models',
-      });
-    } catch (error) {
-      console.error('Secret share error:', error);
+      await Share.share({ message: shareText });
+      setIsSecretMenuVisible(false);
+    } catch (err) {
+      console.error('Share error:', err);
     }
-  }, [entries, t, language]);
+  };
+
+  const handleSyncAll = async () => {
+    if (!apiKey) return;
+    setIsSyncing(true);
+    setSyncProgress({ current: 0, total: entries.length, label: 'Starte Synchronisation...' });
+
+    try {
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        setSyncProgress(prev => ({ ...prev, current: i + 1, label: `Verarbeite: ${entry.name || entry.taskId}` }));
+
+        try {
+          const tripoData = await getTripoTaskStatus(apiKey, entry.taskId);
+          const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model_url || tripoData.output?.model;
+
+          if (glbUrl) {
+            const litterboxUrl = await uploadToLitterbox(glbUrl, entry.modelHeightMeters);
+            const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl)}`;
+            const downloadUrl = `https://skaterdenni-coder.github.io/Snap2ModelDownload/?model=${encodeURIComponent(litterboxUrl)}`;
+
+            updateEntry(entry.taskId, {
+              arUrl: viewerUrl,
+              arUrlGeneratedAt: new Date().toISOString(),
+              glbDownloadUrl: downloadUrl,
+              glbDownloadUrlGeneratedAt: new Date().toISOString()
+            });
+          }
+        } catch (err) {
+          console.warn(`[Sync] Failed for ${entry.taskId}:`, err);
+        }
+      }
+      Alert.alert(t.status.success, language === 'de' ? 'Alle Links wurden erfolgreich erneuert.' : 'All links have been successfully renewed.');
+    } catch (err) {
+      console.error('Sync all error:', err);
+      Alert.alert(t.error, 'Synchronisation fehlgeschlagen.');
+    } finally {
+      setIsSyncing(false);
+      setIsSecretMenuVisible(false);
+    }
+  };
 
   const handleLanguageChange = (newLang: Language) => {
     if (Platform.OS !== 'web') {
@@ -119,7 +159,8 @@ export default function SettingsScreen() {
       setDeTaps(nextTaps);
       if (nextTaps >= 10) {
         setDeTaps(0);
-        handleSecretShare();
+        setIsSecretMenuVisible(true);
+        if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } else {
       setDeTaps(0);
@@ -422,9 +463,74 @@ export default function SettingsScreen() {
         )}
 
         <Text style={[styles.footerText, { color: colors.textTertiary }]}>
-          created by Dennis Werner 2026 V0.5.10.6.APIV3_V4
+          created by Dennis Werner 2026 V0.5.10.7.QS_Sync
         </Text>
       </ScrollView>
+
+      <Modal
+        visible={isSecretMenuVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !isSyncing && setIsSecretMenuVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                {language === 'de' ? 'Geheim-Menü' : 'Secret Menu'}
+              </Text>
+              {!isSyncing && (
+                <TouchableOpacity onPress={() => setIsSecretMenuVisible(false)}>
+                  <X size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {isSyncing ? (
+              <View style={styles.syncBox}>
+                <ActivityIndicator size="large" color={colors.accent} />
+                <Text style={[styles.syncLabel, { color: colors.text }]}>{syncProgress.label}</Text>
+                <Text style={[styles.syncCount, { color: colors.textSecondary }]}>
+                  {syncProgress.current} / {syncProgress.total}
+                </Text>
+                <View style={[styles.progressBarBg, { backgroundColor: colors.inputBackground }]}>
+                  <View
+                    style={[
+                      styles.progressBarFill,
+                      {
+                        backgroundColor: colors.accent,
+                        width: `${(syncProgress.current / syncProgress.total) * 100}%`
+                      }
+                    ]}
+                  />
+                </View>
+              </View>
+            ) : (
+              <View style={styles.secretButtons}>
+                <TouchableOpacity
+                  style={[styles.secretButton, { backgroundColor: colors.accent + '15', borderColor: colors.accent + '30' }]}
+                  onPress={handleSecretExport}
+                >
+                  <Share2 size={20} color={colors.accent} />
+                  <Text style={[styles.secretButtonText, { color: colors.accent }]}>
+                    {language === 'de' ? 'Alle Links exportieren' : 'Export all links'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.secretButton, { backgroundColor: colors.success + '15', borderColor: colors.success + '30' }]}
+                  onPress={handleSyncAll}
+                >
+                  <RefreshCw size={20} color={colors.success} />
+                  <Text style={[styles.secretButtonText, { color: colors.success }]}>
+                    {language === 'de' ? 'Alle synchronisieren' : 'Sync all models'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -556,5 +662,69 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 12,
     marginTop: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 24,
+    gap: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  secretButtons: {
+    gap: 12,
+  },
+  secretButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  secretButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  syncBox: {
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+  },
+  syncLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  syncCount: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  progressBarBg: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 4,
   },
 });

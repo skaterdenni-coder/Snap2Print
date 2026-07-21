@@ -26,6 +26,7 @@ import { useSettings } from '@/contexts/SettingsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useHistory, HistoryEntry } from '@/contexts/HistoryContext';
 import { getTripoTaskStatus } from '@/utils/tripo';
+import { uploadToLitterbox } from '@/utils/FileSharing';
 import { resizeGLB, resizeGLBToBytes } from '@/utils/modelResizer';
 import { rainbowGradient } from '@/constants/colors';
 
@@ -225,33 +226,8 @@ export default function HistoryScreen() {
       const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model_url || tripoData.output?.model;
       if (!glbUrl) throw new Error('GLB URL not found');
 
-      const formData = new FormData();
-      formData.append('reqtype', 'fileupload');
-      formData.append('time', '72h');
-
-      const scalingHeight = targetHeightMeters ?? item?.modelHeightMeters;
-
-      if (scalingHeight) {
-        if (Platform.OS === 'web') {
-          setProcessingTask({ taskId, label: 'Skaliere GLB-Modell...', progress: 35 });
-          const resizedBlob = await resizeGLB(glbUrl, scalingHeight);
-          formData.append('fileToUpload', new File([resizedBlob], 'model.glb', { type: 'model/gltf-binary' }));
-        } else {
-          const fileUri = await createLocalGlbFileAsync(glbUrl, scalingHeight, (label, progress) => {
-            setProcessingTask({ taskId, label, progress });
-          });
-          // @ts-ignore
-          formData.append('fileToUpload', { uri: fileUri, name: 'model.glb', type: 'model/gltf-binary' });
-        }
-      } else {
-        // @ts-ignore
-        formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
-      }
-
-      setProcessingTask({ taskId, label: 'Lade Modell hoch...', progress: 80 });
-      const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
-      const litterboxUrl = await uploadRes.text();
-      if (!litterboxUrl.startsWith('http')) throw new Error('Upload failed');
+      setProcessingTask({ taskId, label: 'Lade Modell hoch...', progress: 40 });
+      const litterboxUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? item?.modelHeightMeters);
 
       const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl.trim())}`;
       updateEntry(taskId, { arUrl: viewerUrl, arUrlGeneratedAt: new Date().toISOString() });
@@ -312,33 +288,8 @@ export default function HistoryScreen() {
       const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model_url || tripoData.output?.model;
       if (!glbUrl) throw new Error('GLB URL not found');
 
-      const formData = new FormData();
-      formData.append('reqtype', 'fileupload');
-      formData.append('time', '72h');
-
-      const scalingHeight = targetHeightMeters ?? item?.modelHeightMeters;
-
-      if (scalingHeight) {
-        if (Platform.OS === 'web') {
-          setProcessingTask({ taskId, label: 'Skaliere GLB-Modell...', progress: 35 });
-          const resizedBlob = await resizeGLB(glbUrl, scalingHeight);
-          formData.append('fileToUpload', new File([resizedBlob], 'model.glb', { type: 'model/gltf-binary' }));
-        } else {
-          const fileUri = await createLocalGlbFileAsync(glbUrl, scalingHeight, (label, progress) => {
-            setProcessingTask({ taskId, label, progress });
-          });
-          // @ts-ignore
-          formData.append('fileToUpload', { uri: fileUri, name: 'model.glb', type: 'model/gltf-binary' });
-        }
-      } else {
-        // @ts-ignore
-        formData.append('fileToUpload', { uri: glbUrl, name: 'model.glb', type: 'model/gltf-binary' });
-      }
-
-      setProcessingTask({ taskId, label: 'Lade Modell hoch...', progress: 80 });
-      const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', { method: 'POST', body: formData });
-      const litterboxUrl = await uploadRes.text();
-      if (!litterboxUrl.startsWith('http')) throw new Error('Upload failed');
+      setProcessingTask({ taskId, label: 'Lade Modell hoch...', progress: 40 });
+      const litterboxUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? item?.modelHeightMeters);
 
       const downloadUrl = `https://skaterdenni-coder.github.io/Snap2ModelDownload/?model=${encodeURIComponent(litterboxUrl.trim())}`;
       updateEntry(taskId, { glbDownloadUrl: downloadUrl, glbDownloadUrlGeneratedAt: new Date().toISOString() });
