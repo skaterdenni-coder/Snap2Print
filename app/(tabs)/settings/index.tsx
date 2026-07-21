@@ -488,7 +488,7 @@ export default function SettingsScreen() {
           <View style={[styles.modalContent, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>
-                {language === 'de' ? 'Geheim-Menü' : 'Secret Menu'}
+                {language === 'de' ? 'Batch Sharing' : 'Secret Menu'}
               </Text>
               {!isSyncing && (
                 <TouchableOpacity onPress={() => setIsSecretMenuVisible(false)}>
