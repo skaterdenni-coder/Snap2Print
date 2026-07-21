@@ -192,7 +192,7 @@ export default function HistoryScreen() {
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, targetHeightMeters?: number) => {
     const item = entries.find(e => e.taskId === taskId);
-    const EXPIRATION_MS = 20 * 60 * 60 * 1000;
+    const EXPIRATION_MS = 71 * 60 * 60 * 1000;
 
     let isLinkValid = false;
     if (item?.arUrl && item.arUrlGeneratedAt) {
@@ -227,7 +227,7 @@ export default function HistoryScreen() {
 
       const formData = new FormData();
       formData.append('reqtype', 'fileupload');
-      formData.append('time', '24h');
+      formData.append('time', '72h');
 
       const scalingHeight = targetHeightMeters ?? item?.modelHeightMeters;
 
@@ -280,7 +280,7 @@ export default function HistoryScreen() {
 
   const shareToDownload = useCallback(async (taskId: string, targetHeightMeters?: number) => {
     const item = entries.find(e => e.taskId === taskId);
-    const EXPIRATION_MS = 20 * 60 * 60 * 1000;
+    const EXPIRATION_MS = 71 * 60 * 60 * 1000;
 
     let isLinkValid = false;
     if (item?.glbDownloadUrl && item.glbDownloadUrlGeneratedAt) {
@@ -314,7 +314,7 @@ export default function HistoryScreen() {
 
       const formData = new FormData();
       formData.append('reqtype', 'fileupload');
-      formData.append('time', '24h');
+      formData.append('time', '72h');
 
       const scalingHeight = targetHeightMeters ?? item?.modelHeightMeters;
 

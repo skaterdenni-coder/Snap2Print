@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Animated,
   Platform,
   Linking,
+  Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,6 +19,7 @@ import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield, Languages, HelpCir
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings, QualityMode } from '@/contexts/SettingsContext';
 import { useLanguage, Language } from '@/contexts/LanguageContext';
+import { useHistory } from '@/contexts/HistoryContext';
 import { ThemeMode, rainbowGradient } from '@/constants/colors';
 
 const THEME_OPTIONS: { mode: ThemeMode; icon: typeof Sun }[] = [
@@ -30,11 +32,13 @@ export default function SettingsScreen() {
   const { colors, mode, setThemeMode } = useTheme();
   const { apiKey, setApiKey, qualityMode, setQualityMode } = useSettings();
   const { language, setLanguage, t } = useLanguage();
+  const { entries } = useHistory();
   const insets = useSafeAreaInsets();
   const [keyInput, setKeyInput] = useState<string>(apiKey);
   const [showKey, setShowKey] = useState<boolean>(false);
   const [saved, setSaved] = useState<boolean>(false);
   const [darkClicks, setDarkClicks] = useState<number>(0);
+  const [deTaps, setDeTaps] = useState<number>(0);
   const [langSwitches, setLangSwitches] = useState<number>(0);
   const [lastLang, setLastLang] = useState<Language>(language);
   const [isRainbowUnlocked, setIsRainbowUnlocked] = useState<boolean>(mode === 'rainbow');
@@ -74,9 +78,51 @@ export default function SettingsScreen() {
     setThemeMode(newMode);
   };
 
+  const handleSecretShare = useCallback(async () => {
+    const validEntries = entries.filter(e => e.arUrl || e.glbDownloadUrl);
+    if (validEntries.length === 0) {
+      Alert.alert(t.error, language === 'de' ? 'Keine Links zum Teilen gefunden.' : 'No links found to share.');
+      return;
+    }
+
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+
+    let shareText = language === 'de' ? 'Hier sind meine 3D-Modelle:\n\n' : 'Here are my 3D models:\n\n';
+    validEntries.forEach((e) => {
+      const index = entries.indexOf(e);
+      const name = e.name || `${t.model} #${entries.length - index}`;
+      shareText += `• ${name}:\n`;
+      if (e.arUrl) shareText += `  AR: ${e.arUrl}\n`;
+      if (e.glbDownloadUrl) shareText += `  Download: ${e.glbDownloadUrl}\n`;
+      shareText += '\n';
+    });
+
+    try {
+      await Share.share({
+        message: shareText,
+        title: language === 'de' ? 'Alle Modelle teilen' : 'Share all models',
+      });
+    } catch (error) {
+      console.error('Secret share error:', error);
+    }
+  }, [entries, t, language]);
+
   const handleLanguageChange = (newLang: Language) => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    if (newLang === 'de') {
+      const nextTaps = deTaps + 1;
+      setDeTaps(nextTaps);
+      if (nextTaps >= 10) {
+        setDeTaps(0);
+        handleSecretShare();
+      }
+    } else {
+      setDeTaps(0);
     }
 
     if (newLang !== lastLang) {

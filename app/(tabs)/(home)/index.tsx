@@ -106,7 +106,7 @@ export default function HomeScreen() {
   const uploadToLitterbox = useCallback(async (glbUrl: string, targetHeightMeters?: number): Promise<string> => {
     const formData = new FormData();
     formData.append('reqtype', 'fileupload');
-    formData.append('time', '24h');
+    formData.append('time', '72h');
 
     if (targetHeightMeters) {
       if (Platform.OS === 'web') {
@@ -350,7 +350,7 @@ export default function HomeScreen() {
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, glbUrl: string, targetHeightMeters?: number) => {
     const existingEntry = entries.find(e => e.taskId === taskId);
-    const EXPIRATION_MS = 20 * 60 * 60 * 1000;
+    const EXPIRATION_MS = 71 * 60 * 60 * 1000;
 
     let isLinkValid = false;
     if (existingEntry?.arUrl && existingEntry.arUrlGeneratedAt) {
@@ -401,7 +401,7 @@ export default function HomeScreen() {
 
   const shareToDownload = useCallback(async (taskId: string, glbUrl: string) => {
     const existingEntry = entries.find(e => e.taskId === taskId);
-    const EXPIRATION_MS = 20 * 60 * 60 * 1000;
+    const EXPIRATION_MS = 71 * 60 * 60 * 1000;
 
     let isLinkValid = false;
     if (existingEntry?.glbDownloadUrl && existingEntry.glbDownloadUrlGeneratedAt) {
