@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import * as KeepAwake from 'expo-keep-awake';
 import { File as ExpoFile, Paths } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -48,6 +49,17 @@ export default function HistoryScreen() {
   const [renameValue, setRenameValue] = useState('');
   const [renameTaskId, setRenameTaskId] = useState<string | null>(null);
   const isRainbow = mode === 'rainbow';
+
+  // Bildschirm aktiv halten während Uploads/Verarbeitung
+  useEffect(() => {
+    const isWorking = uploadingTaskId !== null || processingTask !== null;
+    if (isWorking) {
+      KeepAwake.activateKeepAwakeAsync();
+    } else {
+      KeepAwake.deactivateKeepAwakeAsync();
+    }
+    return () => { KeepAwake.deactivateKeepAwakeAsync(); };
+  }, [uploadingTaskId, processingTask]);
 
   const getExpirationStatus = (completedAt: string) => {
     const start = new Date(completedAt).getTime();

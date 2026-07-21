@@ -15,6 +15,7 @@ import {
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
+import * as KeepAwake from 'expo-keep-awake';
 import { File as ExpoFile, Paths } from 'expo-file-system';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ImagePlus, X, Sparkles, Box, Clock, CheckCircle, AlertCircle, Loader, Share2, HelpCircle } from 'lucide-react-native';
@@ -294,6 +295,17 @@ export default function HomeScreen() {
       Alert.alert(t.error, error.message);
     },
   });
+
+  // Bildschirm aktiv halten während Uploads/Verarbeitung
+  useEffect(() => {
+    const isWorking = uploadingTaskId !== null || createTaskMutation.isPending || tasks.some(t => t.status === 'IN_PROGRESS' || t.status === 'PENDING');
+    if (isWorking) {
+      KeepAwake.activateKeepAwakeAsync();
+    } else {
+      KeepAwake.deactivateKeepAwakeAsync();
+    }
+    return () => { KeepAwake.deactivateKeepAwakeAsync(); };
+  }, [uploadingTaskId, createTaskMutation.isPending, tasks]);
 
   const handleCreate = useCallback(() => {
     const activeImageCount = images.filter(img => img !== null).length;

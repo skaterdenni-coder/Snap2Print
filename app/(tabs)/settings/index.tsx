@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import * as KeepAwake from 'expo-keep-awake';
 import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield, Languages, HelpCircle, Zap, Sparkles, Share2, RefreshCw, X } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings, QualityMode } from '@/contexts/SettingsContext';
@@ -53,6 +54,16 @@ export default function SettingsScreen() {
   const checkScale = useRef(new Animated.Value(0)).current;
 
   const isRainbow = mode === 'rainbow';
+
+  // Bildschirm aktiv halten während Synchronisation
+  useEffect(() => {
+    if (isSyncing) {
+      KeepAwake.activateKeepAwakeAsync();
+    } else {
+      KeepAwake.deactivateKeepAwakeAsync();
+    }
+    return () => { KeepAwake.deactivateKeepAwakeAsync(); };
+  }, [isSyncing]);
 
   const handleSaveKey = () => {
     setApiKey(keyInput.trim());
