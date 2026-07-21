@@ -62,7 +62,7 @@ export default function SettingsScreen() {
     } else {
       KeepAwake.deactivateKeepAwake();
     }
-    return () => { KeepAwake.deactivateKeepAwakeAsync(); };
+    return () => { KeepAwake.deactivateKeepAwake(); };
   }, [isSyncing]);
 
   const handleSaveKey = () => {
@@ -474,7 +474,7 @@ export default function SettingsScreen() {
         )}
 
         <Text style={[styles.footerText, { color: colors.textTertiary }]}>
-          created by Dennis Werner 2026 V0.5.10.7.QS_Sync
+          created by Dennis Werner 2026 V0.5.10.7.QS_SyncV1
         </Text>
       </ScrollView>
 

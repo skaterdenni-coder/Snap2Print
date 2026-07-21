@@ -58,7 +58,7 @@ export default function HistoryScreen() {
     } else {
       KeepAwake.deactivateKeepAwake();
     }
-    return () => { KeepAwake.deactivateKeepAwakeAsync(); };
+    return () => { KeepAwake.deactivateKeepAwake(); };
   }, [uploadingTaskId, processingTask]);
 
   const getExpirationStatus = (completedAt: string) => {

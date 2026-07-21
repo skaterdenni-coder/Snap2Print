@@ -304,7 +304,7 @@ export default function HomeScreen() {
     } else {
       KeepAwake.deactivateKeepAwake();
     }
-    return () => { KeepAwake.deactivateKeepAwakeAsync(); };
+    return () => { KeepAwake.deactivateKeepAwake(); };
   }, [uploadingTaskId, createTaskMutation.isPending, tasks]);
 
   const handleCreate = useCallback(() => {
