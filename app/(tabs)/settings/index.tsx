@@ -60,7 +60,7 @@ export default function SettingsScreen() {
     if (isSyncing) {
       KeepAwake.activateKeepAwakeAsync();
     } else {
-      KeepAwake.deactivateKeepAwakeAsync();
+      KeepAwake.deactivateKeepAwake();
     }
     return () => { KeepAwake.deactivateKeepAwakeAsync(); };
   }, [isSyncing]);

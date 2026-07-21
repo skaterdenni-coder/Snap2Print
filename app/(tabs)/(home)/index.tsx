@@ -302,7 +302,7 @@ export default function HomeScreen() {
     if (isWorking) {
       KeepAwake.activateKeepAwakeAsync();
     } else {
-      KeepAwake.deactivateKeepAwakeAsync();
+      KeepAwake.deactivateKeepAwake();
     }
     return () => { KeepAwake.deactivateKeepAwakeAsync(); };
   }, [uploadingTaskId, createTaskMutation.isPending, tasks]);

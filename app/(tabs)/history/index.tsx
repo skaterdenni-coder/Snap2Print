@@ -56,7 +56,7 @@ export default function HistoryScreen() {
     if (isWorking) {
       KeepAwake.activateKeepAwakeAsync();
     } else {
-      KeepAwake.deactivateKeepAwakeAsync();
+      KeepAwake.deactivateKeepAwake();
     }
     return () => { KeepAwake.deactivateKeepAwakeAsync(); };
   }, [uploadingTaskId, processingTask]);
