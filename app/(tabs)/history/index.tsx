@@ -205,7 +205,7 @@ export default function HistoryScreen() {
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, targetHeightMeters?: number) => {
     const item = entries.find(e => e.taskId === taskId);
-    const EXPIRATION_MS = 71 * 60 * 60 * 1000;
+    const EXPIRATION_MS = 21 * 60 * 60 * 1000;
 
     let isLinkValid = false;
     if (item?.arUrl && item.arUrlGeneratedAt) {
@@ -268,7 +268,7 @@ export default function HistoryScreen() {
 
   const shareToDownload = useCallback(async (taskId: string, targetHeightMeters?: number) => {
     const item = entries.find(e => e.taskId === taskId);
-    const EXPIRATION_MS = 71 * 60 * 60 * 1000;
+    const EXPIRATION_MS = 21 * 60 * 60 * 1000;
 
     let isLinkValid = false;
     if (item?.glbDownloadUrl && item.glbDownloadUrlGeneratedAt) {

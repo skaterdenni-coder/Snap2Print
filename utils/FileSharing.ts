@@ -5,7 +5,7 @@ import { resizeGLB, resizeGLBToBytes } from './modelResizer';
 /**
  * Lädt ein GLB-Modell zu Litterbox hoch.
  * Unterstützt optionales Skalieren vor dem Upload.
- * Speicherdauer ist fest auf 72h eingestellt.
+ * Speicherdauer ist fest auf 24h eingestellt.
  */
 export async function uploadToLitterbox(
   glbUrl: string,
@@ -13,7 +13,7 @@ export async function uploadToLitterbox(
 ): Promise<string> {
   const formData = new FormData();
   formData.append('reqtype', 'fileupload');
-  formData.append('time', '72h');
+  formData.append('time', '24h');
 
   if (targetHeightMeters) {
     if (Platform.OS === 'web') {
