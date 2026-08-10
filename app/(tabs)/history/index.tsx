@@ -239,7 +239,20 @@ export default function HistoryScreen() {
       if (!glbUrl) throw new Error('GLB URL not found');
 
       setProcessingTask({ taskId, label: 'Lade Modell hoch...', progress: 40 });
-      const litterboxUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? item?.modelHeightMeters);
+
+      const progInterval = setInterval(() => {
+        setProcessingTask(prev => {
+          if (!prev || prev.taskId !== taskId || prev.progress >= 92) return prev;
+          return { ...prev, progress: prev.progress + 1 };
+        });
+      }, 400);
+
+      let litterboxUrl: string;
+      try {
+        litterboxUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? item?.modelHeightMeters);
+      } finally {
+        clearInterval(progInterval);
+      }
 
       const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl.trim())}`;
       updateEntry(taskId, { arUrl: viewerUrl, arUrlGeneratedAt: new Date().toISOString() });
@@ -301,7 +314,20 @@ export default function HistoryScreen() {
       if (!glbUrl) throw new Error('GLB URL not found');
 
       setProcessingTask({ taskId, label: 'Lade Modell hoch...', progress: 40 });
-      const litterboxUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? item?.modelHeightMeters);
+
+      const progInterval = setInterval(() => {
+        setProcessingTask(prev => {
+          if (!prev || prev.taskId !== taskId || prev.progress >= 92) return prev;
+          return { ...prev, progress: prev.progress + 1 };
+        });
+      }, 400);
+
+      let litterboxUrl: string;
+      try {
+        litterboxUrl = await uploadToLitterbox(glbUrl, targetHeightMeters ?? item?.modelHeightMeters);
+      } finally {
+        clearInterval(progInterval);
+      }
 
       const downloadUrl = `https://skaterdenni-coder.github.io/Snap2ModelDownload/?model=${encodeURIComponent(litterboxUrl.trim())}`;
       updateEntry(taskId, { glbDownloadUrl: downloadUrl, glbDownloadUrlGeneratedAt: new Date().toISOString() });
