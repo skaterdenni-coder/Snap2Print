@@ -53,12 +53,21 @@ export default function HistoryScreen() {
   // Bildschirm aktiv halten während Uploads/Verarbeitung
   useEffect(() => {
     const isWorking = uploadingTaskId !== null || processingTask !== null;
-    if (isWorking) {
-      KeepAwake.activateKeepAwakeAsync();
-    } else {
-      KeepAwake.deactivateKeepAwake();
-    }
-    return () => { KeepAwake.deactivateKeepAwake(); };
+
+    const handleKeepAwake = async () => {
+      try {
+        if (isWorking) {
+          await KeepAwake.activateKeepAwakeAsync();
+        } else {
+          await KeepAwake.deactivateKeepAwake();
+        }
+      } catch (e) {}
+    };
+
+    handleKeepAwake();
+    return () => {
+      KeepAwake.deactivateKeepAwake().catch(() => {});
+    };
   }, [uploadingTaskId, processingTask]);
 
   const getExpirationStatus = (completedAt: string) => {

@@ -299,12 +299,21 @@ export default function HomeScreen() {
   // Bildschirm aktiv halten während Uploads/Verarbeitung
   useEffect(() => {
     const isWorking = uploadingTaskId !== null || createTaskMutation.isPending || tasks.some(t => t.status === 'IN_PROGRESS' || t.status === 'PENDING');
-    if (isWorking) {
-      KeepAwake.activateKeepAwakeAsync();
-    } else {
-      KeepAwake.deactivateKeepAwake();
-    }
-    return () => { KeepAwake.deactivateKeepAwake(); };
+
+    const handleKeepAwake = async () => {
+      try {
+        if (isWorking) {
+          await KeepAwake.activateKeepAwakeAsync();
+        } else {
+          await KeepAwake.deactivateKeepAwake();
+        }
+      } catch (e) {}
+    };
+
+    handleKeepAwake();
+    return () => {
+      KeepAwake.deactivateKeepAwake().catch(() => {});
+    };
   }, [uploadingTaskId, createTaskMutation.isPending, tasks]);
 
   const handleCreate = useCallback(() => {

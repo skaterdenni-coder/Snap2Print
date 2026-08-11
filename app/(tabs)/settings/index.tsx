@@ -57,12 +57,20 @@ export default function SettingsScreen() {
 
   // Bildschirm aktiv halten während Synchronisation
   useEffect(() => {
-    if (isSyncing) {
-      KeepAwake.activateKeepAwakeAsync();
-    } else {
-      KeepAwake.deactivateKeepAwake();
-    }
-    return () => { KeepAwake.deactivateKeepAwake(); };
+    const handleKeepAwake = async () => {
+      try {
+        if (isSyncing) {
+          await KeepAwake.activateKeepAwakeAsync();
+        } else {
+          await KeepAwake.deactivateKeepAwake();
+        }
+      } catch (e) {}
+    };
+
+    handleKeepAwake();
+    return () => {
+      KeepAwake.deactivateKeepAwake().catch(() => {});
+    };
   }, [isSyncing]);
 
   const handleSaveKey = () => {
