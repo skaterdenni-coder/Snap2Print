@@ -266,7 +266,7 @@ export default function HistoryScreen() {
       const viewerUrl = `https://skaterdenni-coder.github.io/AR-Viewer/?model=${encodeURIComponent(litterboxUrl.trim())}`;
       updateEntry(taskId, { arUrl: viewerUrl, arUrlGeneratedAt: new Date().toISOString() });
 
-      setProcessingTask({ taskId, label: 'Oeffne Teilen...', progress: 100 });
+      setProcessingTask({ taskId, label: 'Öffne Teilen...', progress: 100 });
       const msg = language === 'de' ? 'Schau dir mein 3D-Modell in AR an' : 'Check out my 3D model in AR';
       const shareUrl = viewerUrl;
 
@@ -341,7 +341,7 @@ export default function HistoryScreen() {
       const downloadUrl = `https://skaterdenni-coder.github.io/Snap2ModelDownload/?model=${encodeURIComponent(litterboxUrl.trim())}`;
       updateEntry(taskId, { glbDownloadUrl: downloadUrl, glbDownloadUrlGeneratedAt: new Date().toISOString() });
 
-      setProcessingTask({ taskId, label: 'Oeffne Teilen...', progress: 100 });
+      setProcessingTask({ taskId, label: 'Öffne Teilen...', progress: 100 });
       const shareUrl = downloadUrl;
 
       setTimeout(async () => {

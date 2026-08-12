@@ -99,12 +99,18 @@ async function uploadToTripo(apiKey: string, uri: string): Promise<string> {
   const match = /\.(\w+)$/.exec(filename);
   const type = match ? `image/${match[1]}` : `image/jpeg`;
 
-  // @ts-ignore
-  formData.append('file', {
-    uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
-    name: filename,
-    type: type,
-  });
+  if (Platform.OS === 'web') {
+    const res = await fetch(uri);
+    const blob = await res.blob();
+    formData.append('file', blob, filename);
+  } else {
+    // @ts-ignore
+    formData.append('file', {
+      uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
+      name: filename,
+      type: type,
+    });
+  }
 
   const response = await fetch(`${TRIPO_BASE_URL}/files`, {
     method: 'POST',
