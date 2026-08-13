@@ -482,7 +482,7 @@ export default function SettingsScreen() {
         )}
 
         <Text style={[styles.footerText, { color: colors.textTertiary }]}>
-          created by Dennis Werner 2026 V0.7
+          created by Dennis Werner 2026 V0.8
         </Text>
       </ScrollView>
 
