@@ -136,7 +136,7 @@ const translations = {
     aboutApp: 'About this App',
     aboutAppDesc: 'Background and goal of this Bachelor\'s thesis',
     baInfoTitle: 'Snap2XR – Bachelor\'s Thesis Project 2026',
-    baInfoText: 'This app was developed by Dennis Werner as part of a Bachelor\'s thesis at Esslingen University of Applied Sciences (Automotive Engineering program).\n\nThe goal of the project was to implement a user-centered solution to lower the barriers to creating 3D models for Augmented Reality (AR). By using modern AI interfaces, Snap2XR enables the generation of high-quality 3D assets from simple photos, making them directly experienceable in space without expert knowledge.',
+    baInfoText: 'This app was developed by Dennis Werner0 as part of a Bachelor\'s thesis at Esslingen University of Applied Sciences (Automotive Engineering program).\n\nThe goal of the project was to implement a user-centered solution to lower the barriers to creating 3D models for Augmented Reality (AR). By using modern AI interfaces, Snap2XR enables the generation of high-quality 3D assets from simple photos, making them directly experienceable in space without expert knowledge.',
     close: 'Close',
   }
 };
