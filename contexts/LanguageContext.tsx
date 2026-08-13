@@ -67,6 +67,11 @@ const translations = {
     language: 'Sprache',
     languageDesc: 'Wähle die App-Sprache',
     help: 'Hilfe',
+    aboutApp: 'Über diese App',
+    aboutAppDesc: 'Hintergrund und Ziel dieser Bachelorarbeit',
+    baInfoTitle: 'Snap2XR – Bachelorarbeit Projekt 2026',
+    baInfoText: 'Diese App wurde von Dennis Werner im Rahmen einer Bachelorarbeit an der Hochschule Esslingen (Studiengang Fahrzeugtechnik) entwickelt.\n\nDas Ziel des Projekts war die Realisierung einer nutzerzentrierten Lösung, um die Hürden bei der Erstellung von 3D-Modellen für Augmented Reality (AR) zu senken. Durch den Einsatz moderner KI-Schnittstellen ermöglicht Snap2XR das Erzeugen hochwertiger 3D-Assets aus einfachen Fotos, um diese ohne Expertenwissen direkt im Raum erlebbar zu machen.',
+    close: 'Schließen',
   },
   en: {
     // Tabs
@@ -128,6 +133,11 @@ const translations = {
     language: 'Language',
     languageDesc: 'Select app language',
     help: 'Help',
+    aboutApp: 'About this App',
+    aboutAppDesc: 'Background and goal of this Bachelor\'s thesis',
+    baInfoTitle: 'Snap2XR – Bachelor\'s Thesis Project 2026',
+    baInfoText: 'This app was developed by Dennis Werner as part of a Bachelor\'s thesis at Esslingen University of Applied Sciences (Automotive Engineering program).\n\nThe goal of the project was to implement a user-centered solution to lower the barriers to creating 3D models for Augmented Reality (AR). By using modern AI interfaces, Snap2XR enables the generation of high-quality 3D assets from simple photos, making them directly experienceable in space without expert knowledge.',
+    close: 'Close',
   }
 };
 

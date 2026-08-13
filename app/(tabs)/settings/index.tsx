@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import * as KeepAwake from 'expo-keep-awake';
-import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield, Languages, HelpCircle, Zap, Sparkles, Share2, RefreshCw, X } from 'lucide-react-native';
+import { Key, Eye, EyeOff, Sun, Moon, Rainbow, Check, Shield, Languages, HelpCircle, Zap, Sparkles, Share2, RefreshCw, X, Info } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings, QualityMode } from '@/contexts/SettingsContext';
 import { useLanguage, Language } from '@/contexts/LanguageContext';
@@ -45,6 +45,7 @@ export default function SettingsScreen() {
   const [darkClicks, setDarkClicks] = useState<number>(0);
   const [deTaps, setDeTaps] = useState<number>(0);
   const [isSecretMenuVisible, setIsSecretMenuVisible] = useState(false);
+  const [isAboutVisible, setIsAboutVisible] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0, label: '' });
   const [langSwitches, setLangSwitches] = useState<number>(0);
@@ -481,8 +482,26 @@ export default function SettingsScreen() {
           </View>
         )}
 
+        <View style={[styles.sectionCard, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
+          <TouchableOpacity
+            style={styles.sectionHeader}
+            onPress={() => setIsAboutVisible(true)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.sectionIconCircle, { backgroundColor: colors.accent + '15' }]}>
+              <Info size={18} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>{t.aboutApp}</Text>
+              <Text style={[styles.sectionDescription, { color: colors.textTertiary }]}>
+                {t.aboutAppDesc}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
         <Text style={[styles.footerText, { color: colors.textTertiary }]}>
-          created by Dennis Werner 2026 V0.8
+          created by Dennis Werner 2026 V0.8.about
         </Text>
       </ScrollView>
 
@@ -547,6 +566,47 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={isAboutVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsAboutVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: colors.card, borderColor: colors.cardBorder, maxWidth: 400 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                {t.aboutApp}
+              </Text>
+              <TouchableOpacity onPress={() => setIsAboutVisible(false)}>
+                <X size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+              <View style={[styles.sectionIconCircle, { backgroundColor: colors.accent + '15', alignSelf: 'center', marginBottom: 20, width: 60, height: 60, borderRadius: 20 }]}>
+                <Sparkles size={30} color={colors.accent} />
+              </View>
+
+              <Text style={[styles.modalInfoTitle, { color: colors.text }]}>
+                {t.baInfoTitle}
+              </Text>
+
+              <Text style={[styles.modalInfoText, { color: colors.textSecondary }]}>
+                {t.baInfoText}
+              </Text>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.saveButton, { backgroundColor: colors.accent, marginTop: 10 }]}
+              onPress={() => setIsAboutVisible(false)}
+            >
+              <Text style={styles.saveButtonText}>{t.close}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -705,6 +765,18 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '800',
+  },
+  modalInfoTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  modalInfoText: {
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 10,
   },
   secretButtons: {
     gap: 12,
