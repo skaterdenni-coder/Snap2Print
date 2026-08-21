@@ -147,7 +147,7 @@ export const [LanguageProvider, useLanguage] = createContextHook(() => {
 
   useEffect(() => {
     AsyncStorage.getItem(LANGUAGE_STORAGE_KEY).then((stored) => {
-      if (stored === 'en' || stored === 'de') {
+      if (stored === 'enj' || stored === 'de') {
         setLanguageState(stored);
       }
       setIsLoaded(true);
