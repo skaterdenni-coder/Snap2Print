@@ -5,8 +5,8 @@ const TRIPO_BASE_URL = 'https://openapi.tripo3d.ai/v3';
 function getTripoUrl(path: string): string {
   const url = path.startsWith('http') ? path : `${TRIPO_BASE_URL}${path}`;
   if (Platform.OS === 'web') {
-    // CORS Proxy Hack für Web-Version (z.B. GitHub Pages)
-    return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+    // Wechsel von corsproxy.io zu allorigins.win, da corsproxy nun einen API-Key verlangt
+    return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
   }
   return url;
 }
@@ -63,11 +63,14 @@ async function safeParseJson(response: Response): Promise<any> {
 
   // Handle auth errors
   if (status === 401 || status === 403) {
-    throw new TripoApiError(
-      'Ungültiger API-Key oder keine Berechtigung.',
-      status,
-      false
-    );
+    let tripoMessage = 'Ungültiger API-Key oder keine Berechtigung.';
+    try {
+      const data = await response.json();
+      if (data.message) tripoMessage += ` (Tripo: ${data.message})`;
+    } catch (e) {
+      // Falls kein JSON zurückkommt
+    }
+    throw new TripoApiError(tripoMessage, status, false);
   }
 
   // Check for JSON response

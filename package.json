@@ -7,8 +7,8 @@
     "start": "bunx rork start -p 94j1o5xvjo1x5w33adatz --tunnel",
     "start-web": "bunx rork start -p 94j1o5xvjo1x5w33adatz --web --tunnel",
     "start-web-dev": "DEBUG=expo* bunx rork start -p 94j1o5xvjo1x5w33adatz --web --tunnel",
-    "predeploy": "npx expo export -p web --clear && node deploy-fix.js",
-    "deploy": "gh-pages -d dist",
+    "predeploy": "expo export -p web --clear && node deploy-fix.js",
+    "deploy": "gh-pages -t -d dist",
     "lint": "expo lint",
     "android": "expo run:android",
     "ios": "expo run:ios"

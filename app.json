@@ -28,7 +28,8 @@
       "favicon": "./assets/images/favicon.png",
       "bundler": "metro",
       "output": "static",
-      "homepage": "https://skaterdenni-coder.github.io/Realisierung-BA/"
+      "homepage": "https://skaterdenni-coder.github.io/Realisierung-BA/",
+      "baseUrl": "/Realisierung-BA"
     },
     "plugins": [
       [
@@ -44,7 +45,7 @@
     ],
     "experiments": {
       "typedRoutes": true,
-      "baseUrl": ""
+      "baseUrl": "/Realisierung-BA"
     }
   }
 }
