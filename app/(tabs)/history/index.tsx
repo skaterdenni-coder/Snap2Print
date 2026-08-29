@@ -169,9 +169,10 @@ export default function HistoryScreen() {
 
       if (Platform.OS === 'web') {
         setProcessingTask({ taskId, label: targetHeightMeters && format === 'glb' ? 'Skaliere GLB-Modell...' : 'Lade Datei...', progress: 35 });
+        const proxiedUrl = proxyUrl(url);
         const blob = targetHeightMeters && format === 'glb'
-          ? await resizeGLB(url, targetHeightMeters)
-          : await (await fetch(url)).blob();
+          ? await resizeGLB(proxiedUrl, targetHeightMeters)
+          : await (await fetch(proxiedUrl)).blob();
         setProcessingTask({ taskId, label: 'Bereite Download vor...', progress: 90 });
         const filename = `model-${taskId}.${format.toLowerCase()}`;
         const file = new File([blob], filename, { type: 'model/gltf-binary' });

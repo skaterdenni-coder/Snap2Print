@@ -1,18 +1,25 @@
 import { Platform } from 'react-native';
 
-// Dein eigener Cloudflare Worker Proxy für CORS
-const TRIPO_BASE_URL = 'https://tripo-proxy.skaterdenni.workers.dev/v3';
+// Dein eigener Cloudflare Worker Proxy
+const PROXY_ROOT = 'https://tripo-proxy.skaterdenni.workers.dev/';
+const TRIPO_BASE_URL = `${PROXY_ROOT}v3`;
+
+/**
+ * Hilfsfunktion, um eine beliebige URL durch den Proxy zu tunneln (nur im Web)
+ */
+export function proxyUrl(url: string): string {
+  if (Platform.OS !== 'web' || !url) return url;
+  if (url.startsWith(PROXY_ROOT)) return url;
+  // Wir hängen die Ziel-URL einfach an unseren Proxy-Root an
+  return `${PROXY_ROOT}${url}`;
+}
 
 function getTripoUrl(path: string): string {
   // Da der Cloudflare Worker nun als Endpunkt fungiert, leiten wir alles direkt dorthin.
   // Falls der Pfad bereits mit http beginnt (z.B. von Tripo-Outputs),
   // müssen wir sicherstellen, dass er auch über den Proxy läuft, falls es CORS Probleme gibt.
   if (path.startsWith('http')) {
-     // Wenn es ein direkter Tripo-Link ist, wandeln wir ihn in den Proxy-Pfad um
-     if (path.includes('tripo3d.ai')) {
-        return path.replace('https://openapi.tripo3d.ai/v3', TRIPO_BASE_URL);
-     }
-     return path;
+     return proxyUrl(path);
   }
   return `${TRIPO_BASE_URL}${path}`;
 }

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { File as ExpoFile, Paths } from 'expo-file-system';
 import { resizeGLB, resizeGLBToBytes } from './modelResizer';
+import { proxyUrl } from './tripo';
 
 /**
  * Lädt ein GLB-Modell zu Litterbox hoch.
@@ -15,9 +16,12 @@ export async function uploadToLitterbox(
   formData.append('reqtype', 'fileupload');
   formData.append('time', '24h');
 
+  // Im Web tunneln wir den glbUrl Download durch unseren Proxy
+  const sourceUrl = proxyUrl(glbUrl);
+
   if (targetHeightMeters) {
     if (Platform.OS === 'web') {
-      const resizedBlob = await resizeGLB(glbUrl, targetHeightMeters);
+      const resizedBlob = await resizeGLB(sourceUrl, targetHeightMeters);
       formData.append('fileToUpload', new File([resizedBlob], 'model.glb', { type: 'model/gltf-binary' }));
     } else {
       const bytes = await resizeGLBToBytes(glbUrl, targetHeightMeters);
@@ -33,7 +37,7 @@ export async function uploadToLitterbox(
     }
   } else {
     if (Platform.OS === 'web') {
-      const res = await fetch(glbUrl);
+      const res = await fetch(sourceUrl);
       const blob = await res.blob();
       formData.append('fileToUpload', new File([blob], 'model.glb', { type: 'model/gltf-binary' }));
     } else {
@@ -46,7 +50,7 @@ export async function uploadToLitterbox(
     }
   }
 
-  const uploadRes = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
+  const uploadRes = await fetch(proxyUrl('https://litterbox.catbox.moe/resources/internals/api.php'), {
     method: 'POST',
     body: formData
   });
