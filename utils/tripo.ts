@@ -2,6 +2,15 @@ import { Platform } from 'react-native';
 
 const TRIPO_BASE_URL = 'https://openapi.tripo3d.ai/v3';
 
+function getTripoUrl(path: string): string {
+  const url = path.startsWith('http') ? path : `${TRIPO_BASE_URL}${path}`;
+  if (Platform.OS === 'web') {
+    // CORS Proxy Hack für Web-Version (z.B. GitHub Pages)
+    return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+  }
+  return url;
+}
+
 export interface TripoTask {
   task_id: string;
   type: string;
@@ -112,7 +121,7 @@ async function uploadToTripo(apiKey: string, uri: string): Promise<string> {
     });
   }
 
-  const response = await fetch(`${TRIPO_BASE_URL}/files`, {
+  const response = await fetch(getTripoUrl('/files'), {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey.trim()}` },
     body: formData,
@@ -170,7 +179,7 @@ export async function createTripoTask(
     body.files = tripoOrder.map(token => token ? { type: 'jpg', file_token: token } : {});
   }
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(getTripoUrl(endpoint.replace(TRIPO_BASE_URL, '')), {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey.trim()}`,
@@ -216,7 +225,7 @@ export async function createTripoRefineTask(
     }
   };
 
-  const response = await fetch(`${TRIPO_BASE_URL}/models/texture`, {
+  const response = await fetch(getTripoUrl('/models/texture'), {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey.trim()}`,
@@ -230,7 +239,7 @@ export async function createTripoRefineTask(
 }
 
 export async function getTripoTaskStatus(apiKey: string, taskId: string): Promise<TripoTask> {
-  const response = await fetch(`${TRIPO_BASE_URL}/tasks/${taskId}`, {
+  const response = await fetch(getTripoUrl(`/tasks/${taskId}`), {
     headers: { 'Authorization': `Bearer ${apiKey.trim()}` },
   });
   const data = await safeParseJson(response);
