@@ -4,10 +4,9 @@ const TRIPO_BASE_URL = 'https://openapi.tripo3d.ai/v3';
 
 function getTripoUrl(path: string): string {
   const url = path.startsWith('http') ? path : `${TRIPO_BASE_URL}${path}`;
-  if (Platform.OS === 'web') {
-    // Wechsel von corsproxy.io zu allorigins.win, da corsproxy nun einen API-Key verlangt
-    return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-  }
+  // Wir deaktivieren den Proxy testweise, um zu sehen, ob Tripo CORS nativ unterstützt.
+  // Viele moderne APIs erlauben dies, wenn ein Auth-Header vorhanden ist.
+  console.log(`[Tripo] Request an: ${url}`);
   return url;
 }
 
