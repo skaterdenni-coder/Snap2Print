@@ -466,7 +466,8 @@ export default function HomeScreen() {
     if (isLinkValid && existingEntry?.stlDownloadUrl) {
       const shareUrl = existingEntry.stlDownloadUrl;
       if (Platform.OS === 'web') {
-        window.open(shareUrl, '_blank');
+        const opened = window.open(shareUrl, '_blank');
+        if (!opened) window.location.href = shareUrl;
       } else {
         setTimeout(async () => {
           try {
@@ -478,14 +479,6 @@ export default function HomeScreen() {
         }, 500);
       }
       return;
-    }
-
-    let webWindow: Window | null = null;
-    if (Platform.OS === 'web') {
-      webWindow = window.open('about:blank', '_blank');
-      if (webWindow) {
-        webWindow.document.write('<html><body style="background:#121212;color:#ffffff;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;margin:0;"><h3>Erstelle STL-3D-Modell...</h3></body></html>');
-      }
     }
 
     setUploadingTaskId(`${taskId}-stl`);
@@ -511,12 +504,16 @@ export default function HomeScreen() {
 
       const shareUrl = viewerUrl;
       if (Platform.OS === 'web') {
-        if (webWindow) {
-          webWindow.location.href = shareUrl;
-        } else {
-          window.open(shareUrl, '_blank');
+        const opened = window.open(shareUrl, '_blank');
+        if (!opened) {
+          Alert.alert(
+            'STL 3D-Druck Betrachter',
+            'Der Betrachter-Link wurde erstellt!',
+            [
+              { text: 'Betrachter öffnen', onPress: () => window.open(shareUrl, '_blank') }
+            ]
+          );
         }
-        setUploadingTaskId(null);
       } else {
         setTimeout(async () => {
           try {
@@ -525,13 +522,12 @@ export default function HomeScreen() {
               url: shareUrl
             });
           } catch (err) { console.error('Share dialog error:', err); }
-          finally { setUploadingTaskId(null); }
         }, 500);
       }
     } catch (e: any) {
-      if (webWindow) webWindow.close();
       console.error('STL export error:', e);
       Alert.alert(t.error, e?.message || 'Fehler beim Erstellen des STL-Betrachter Links');
+    } finally {
       setUploadingTaskId(null);
     }
   }, [apiKey, t, entries, updateEntry]);

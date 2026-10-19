@@ -246,7 +246,8 @@ export default function HistoryScreen() {
     if (isLinkValid && item?.stlDownloadUrl) {
       const shareUrl = item.stlDownloadUrl;
       if (Platform.OS === 'web') {
-        window.open(shareUrl, '_blank');
+        const opened = window.open(shareUrl, '_blank');
+        if (!opened) window.location.href = shareUrl;
       } else {
         setTimeout(async () => {
           try {
@@ -260,16 +261,8 @@ export default function HistoryScreen() {
       return;
     }
 
-    let webWindow: Window | null = null;
-    if (Platform.OS === 'web') {
-      webWindow = window.open('about:blank', '_blank');
-      if (webWindow) {
-        webWindow.document.write('<html><body style="background:#121212;color:#ffffff;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;margin:0;"><h3>Erstelle STL-3D-Modell...</h3></body></html>');
-      }
-    }
-
     setUploadingTaskId(`${taskId}-stl`);
-    setProcessingTask({ taskId, label: 'Lade Modell für STL...', progress: 10 });
+    setProcessingTask({ taskId, label: 'Konvertiere zu STL (3D-Druck)...', progress: 20 });
     try {
       let glbUrl = item?.modelUrls?.glb;
       if (!glbUrl && apiKey) {
@@ -281,26 +274,29 @@ export default function HistoryScreen() {
         throw new Error('GLB URL nicht gefunden');
       }
 
-      setProcessingTask({ taskId, label: 'Konvertiere zu STL (3D-Druck)...', progress: 40 });
+      setProcessingTask({ taskId, label: 'Konvertiere Modell...', progress: 50 });
       const stlBytes = await convertGLBToSTLBytes(glbUrl, targetHeightMeters ?? item?.modelHeightMeters);
 
-      setProcessingTask({ taskId, label: 'Lade STL hoch...', progress: 75 });
+      setProcessingTask({ taskId, label: 'Lade STL hoch...', progress: 85 });
       const rawStlUrl = await uploadBytesToLitterbox(stlBytes, 'model.stl', 'model/stl');
 
       const viewerUrl = `https://skaterdenni-coder.github.io/ModellBetrachter/?model=${encodeURIComponent(rawStlUrl.trim())}`;
       updateEntry(taskId, { stlDownloadUrl: viewerUrl, stlDownloadUrlGeneratedAt: new Date().toISOString() });
 
-      setProcessingTask({ taskId, label: 'Öffne Betrachter...', progress: 100 });
+      setProcessingTask({ taskId, label: 'Fertig! Öffne Betrachter...', progress: 100 });
       const shareUrl = viewerUrl;
 
       if (Platform.OS === 'web') {
-        if (webWindow) {
-          webWindow.location.href = shareUrl;
-        } else {
-          window.open(shareUrl, '_blank');
+        const opened = window.open(shareUrl, '_blank');
+        if (!opened) {
+          Alert.alert(
+            'STL 3D-Druck Betrachter',
+            'Der Betrachter-Link wurde erstellt!',
+            [
+              { text: 'Betrachter öffnen', onPress: () => window.open(shareUrl, '_blank') }
+            ]
+          );
         }
-        setUploadingTaskId(null);
-        setProcessingTask(null);
       } else {
         setTimeout(async () => {
           try {
@@ -309,13 +305,12 @@ export default function HistoryScreen() {
               url: shareUrl,
             });
           } catch (err) { console.error('Share dialog error:', err); }
-          finally { setUploadingTaskId(null); setProcessingTask(null); }
         }, 500);
       }
     } catch (error: any) {
-      if (webWindow) webWindow.close();
       console.error('STL API export error:', error);
       Alert.alert(t.error, error?.message || 'Fehler beim Erstellen des STL-Betrachters.');
+    } finally {
       setUploadingTaskId(null);
       setProcessingTask(null);
     }
