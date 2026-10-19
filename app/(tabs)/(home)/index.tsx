@@ -191,6 +191,17 @@ export default function HomeScreen() {
         }
       } catch (error: any) {
         console.error('[Tripo] Poll Fehler:', error);
+        // Falls ein Task nicht mehr auf den Tripo-Servern existiert (z. B. abgelaufen oder ungültige ID)
+        if (
+          error?.statusCode === 404 ||
+          (error?.message && error.message.toLowerCase().includes('not found'))
+        ) {
+          console.warn(`[Tripo] Task ${taskId} existiert nicht mehr bei Tripo. Beende Polling.`);
+          clearInterval(interval);
+          delete pollIntervals.current[taskId];
+          removeActiveTask(taskId);
+          setTasks(prev => prev.filter(t => t.taskId !== taskId));
+        }
       }
     }, 4000);
     pollIntervals.current[taskId] = interval;

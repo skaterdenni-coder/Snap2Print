@@ -41,6 +41,10 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const [keyInput, setKeyInput] = useState<string>(apiKey);
   const [showKey, setShowKey] = useState<boolean>(false);
+
+  useEffect(() => {
+    setKeyInput(apiKey);
+  }, [apiKey]);
   const [saved, setSaved] = useState<boolean>(false);
   const [darkClicks, setDarkClicks] = useState<number>(0);
   const [deTaps, setDeTaps] = useState<number>(0);
@@ -254,7 +258,7 @@ export default function SettingsScreen() {
             <Shield size={16} color={colors.textTertiary} />
             <TextInput
               style={[styles.input, { color: colors.text }]}
-              value={keyInput}
+              value="tsk_gsgNHCOwT8ZE4QPgKSmX44Weni6RMM7NFLLZH4M7rgI"
               onChangeText={setKeyInput}
               placeholder="TSK_xxxxxxxxxxxxxxxxx"
               placeholderTextColor={colors.textTertiary}
@@ -501,7 +505,7 @@ export default function SettingsScreen() {
         </View>
 
         <Text style={[styles.footerText, { color: colors.textTertiary }]}>
-          created by Dennis Werner 2026 V0.8.1.Print_Main
+          created by Dennis Werner 2026 V0.8.1.Print_Main1
         </Text>
       </ScrollView>
 
