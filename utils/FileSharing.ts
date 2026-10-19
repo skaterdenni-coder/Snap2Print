@@ -80,7 +80,7 @@ export async function uploadBytesToLitterbox(
   formData.append('time', '24h');
 
   if (Platform.OS === 'web') {
-    formData.append('fileToUpload', new File([bytes.buffer as ArrayBuffer], filename, { type: mimeType }));
+    formData.append('fileToUpload', new File([bytes], filename, { type: mimeType }));
   } else {
     const file = new ExpoFile(Paths.cache, `upload-${Date.now()}-${filename}`);
     file.write(bytes);

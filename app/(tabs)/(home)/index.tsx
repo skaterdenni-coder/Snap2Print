@@ -23,7 +23,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { createTripoTask, getTripoTaskStatus, mapTripoStatus, createTripoRefineTask, imageUriToBase64DataUrl, TripoApiError } from '@/utils/tripo';
+import { createTripoTask, getTripoTaskStatus, mapTripoStatus, createTripoRefineTask, createTripoConvertTask, imageUriToBase64DataUrl, TripoApiError } from '@/utils/tripo';
 import { rainbowGradient } from '@/constants/colors';
 import { useHistory } from '@/contexts/HistoryContext';
 import { uploadToLitterbox, uploadBytesToLitterbox } from '@/utils/FileSharing';
@@ -450,7 +450,7 @@ export default function HomeScreen() {
     }
   }, [t, entries, uploadToLitterbox, updateEntry]);
 
-  const shareToSTLViewer = useCallback(async (taskId: string, glbUrl: string, targetHeightMeters?: number) => {
+  const shareToSTLViewer = useCallback(async (taskId: string, targetHeightMeters?: number) => {
     const existingEntry = entries.find(e => e.taskId === taskId);
     const EXPIRATION_MS = 21 * 60 * 60 * 1000;
 
@@ -465,43 +465,76 @@ export default function HomeScreen() {
 
     if (isLinkValid && existingEntry?.stlDownloadUrl) {
       const shareUrl = existingEntry.stlDownloadUrl;
-      setTimeout(async () => {
-        try {
-          await Share.share({
-            message: Platform.OS === 'android' ? `STL 3D-Druck Betrachter: ${shareUrl}` : `STL 3D-Druck Betrachter`,
-            url: shareUrl
-          });
-        } catch (err) { console.error('Share dialog error:', err); }
-      }, 500);
+      if (Platform.OS === 'web') {
+        window.open(shareUrl, '_blank');
+      } else {
+        setTimeout(async () => {
+          try {
+            await Share.share({
+              message: Platform.OS === 'android' ? `STL 3D-Druck Betrachter: ${shareUrl}` : `STL 3D-Druck Betrachter`,
+              url: shareUrl
+            });
+          } catch (err) { console.error('Share dialog error:', err); }
+        }, 500);
+      }
       return;
+    }
+
+    let webWindow: Window | null = null;
+    if (Platform.OS === 'web') {
+      webWindow = window.open('about:blank', '_blank');
+      if (webWindow) {
+        webWindow.document.write('<html><body style="background:#121212;color:#ffffff;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;margin:0;"><h3>Erstelle STL-3D-Modell...</h3></body></html>');
+      }
     }
 
     setUploadingTaskId(`${taskId}-stl`);
     try {
-      const stlBytes = await convertGLBToSTLBytes(glbUrl, targetHeightMeters ?? existingEntry?.modelHeightMeters);
-      const rawUrl = await uploadBytesToLitterbox(stlBytes, 'model.stl', 'model/stl');
-      const viewerUrl = `https://skaterdenni-coder.github.io/ModellBetrachter/?model=${encodeURIComponent(rawUrl)}`;
+      let glbUrl = existingEntry?.modelUrls?.glb;
+      if (!glbUrl && apiKey) {
+        const tripoData = await getTripoTaskStatus(apiKey, taskId);
+        glbUrl = tripoData.output?.pbr_model || tripoData.output?.model_url || tripoData.output?.model;
+      }
 
+      if (!glbUrl) {
+        throw new Error('GLB URL nicht gefunden');
+      }
+
+      const stlBytes = await convertGLBToSTLBytes(glbUrl, targetHeightMeters ?? existingEntry?.modelHeightMeters);
+      const rawStlUrl = await uploadBytesToLitterbox(stlBytes, 'model.stl', 'model/stl');
+
+      const viewerUrl = `https://skaterdenni-coder.github.io/ModellBetrachter/?model=${encodeURIComponent(rawStlUrl.trim())}`;
       updateEntry(taskId, {
         stlDownloadUrl: viewerUrl,
         stlDownloadUrlGeneratedAt: new Date().toISOString()
       });
 
       const shareUrl = viewerUrl;
-      setTimeout(async () => {
-        try {
-          await Share.share({
-            message: Platform.OS === 'android' ? `STL 3D-Druck Betrachter: ${shareUrl}` : `STL 3D-Druck Betrachter`,
-            url: shareUrl
-          });
-        } catch (err) { console.error('Share dialog error:', err); }
-        finally { setUploadingTaskId(null); }
-      }, 500);
-    } catch (e) {
-      Alert.alert(t.error, 'Failed to prepare STL viewer link');
+      if (Platform.OS === 'web') {
+        if (webWindow) {
+          webWindow.location.href = shareUrl;
+        } else {
+          window.open(shareUrl, '_blank');
+        }
+        setUploadingTaskId(null);
+      } else {
+        setTimeout(async () => {
+          try {
+            await Share.share({
+              message: Platform.OS === 'android' ? `STL 3D-Druck Betrachter: ${shareUrl}` : `STL 3D-Druck Betrachter`,
+              url: shareUrl
+            });
+          } catch (err) { console.error('Share dialog error:', err); }
+          finally { setUploadingTaskId(null); }
+        }, 500);
+      }
+    } catch (e: any) {
+      if (webWindow) webWindow.close();
+      console.error('STL export error:', e);
+      Alert.alert(t.error, e?.message || 'Fehler beim Erstellen des STL-Betrachter Links');
       setUploadingTaskId(null);
     }
-  }, [t, entries, updateEntry]);
+  }, [apiKey, t, entries, updateEntry]);
 
   const getRainbowColor = (index: number) => rainbowGradient[index % rainbowGradient.length];
 
@@ -658,7 +691,7 @@ export default function HomeScreen() {
                       {task.modelUrls.glb && (
                         <TouchableOpacity
                           style={[styles.shareChip, { backgroundColor: '#FF9F4315', borderColor: '#FF9F4330' }]}
-                          onPress={() => task.modelUrls?.glb && shareToSTLViewer(task.taskId, task.modelUrls.glb, task.modelHeightMeters)}
+                          onPress={() => shareToSTLViewer(task.taskId, task.modelHeightMeters)}
                           disabled={uploadingTaskId === `${task.id}-stl`}
                         >
                           {uploadingTaskId === `${task.id}-stl` ? (

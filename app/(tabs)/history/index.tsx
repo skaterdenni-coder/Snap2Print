@@ -153,13 +153,28 @@ export default function HistoryScreen() {
   }, []);
 
   const downloadFile = useCallback(async (taskId: string, format: string, targetHeightMeters?: number) => {
-    if (!apiKey) {
-      Alert.alert(t.error, 'No API Key found');
-      return;
-    }
-
-    setProcessingTask({ taskId, label: 'Erneuere Download-Link...', progress: 10 });
+    setProcessingTask({ taskId, label: 'Vorbereitung Download...', progress: 10 });
     try {
+      if (format.toLowerCase() === 'stl') {
+        const item = entries.find(e => e.taskId === taskId);
+        let glbUrl = item?.modelUrls?.glb;
+        if (!glbUrl && apiKey) {
+          const tripoData = await getTripoTaskStatus(apiKey, taskId);
+          glbUrl = tripoData.output?.pbr_model || tripoData.output?.model_url || tripoData.output?.model;
+        }
+        if (!glbUrl) throw new Error('GLB URL nicht gefunden');
+
+        await exportSTL(glbUrl, targetHeightMeters ?? item?.modelHeightMeters, `model-${taskId}.stl`, (label, progress) => {
+          setProcessingTask({ taskId, label, progress });
+        });
+        return;
+      }
+
+      if (!apiKey) {
+        Alert.alert(t.error, 'No API Key found');
+        return;
+      }
+
       const tripoData = await getTripoTaskStatus(apiKey, taskId);
       const url = format === 'glb'
         ? (tripoData.output?.pbr_model || tripoData.output?.model_url || tripoData.output?.model)
@@ -207,13 +222,13 @@ export default function HistoryScreen() {
       } else {
         Linking.openURL(url);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Download/Refresh error:', error);
-      Alert.alert(t.error, 'The download link could not be loaded.');
+      Alert.alert(t.error, error?.message || 'The download link could not be loaded.');
     } finally {
       setProcessingTask(null);
     }
-  }, [apiKey, createLocalGlbFileAsync, t]);
+  }, [apiKey, createLocalGlbFileAsync, entries, t]);
 
   const shareToSTLViewer = useCallback(async (taskId: string, targetHeightMeters?: number) => {
     const item = entries.find(e => e.taskId === taskId);
@@ -230,53 +245,81 @@ export default function HistoryScreen() {
 
     if (isLinkValid && item?.stlDownloadUrl) {
       const shareUrl = item.stlDownloadUrl;
-      setTimeout(async () => {
-        try {
-          await Share.share({
-            message: Platform.OS === 'android' ? `STL 3D-Druck Betrachter: ${shareUrl}` : `STL 3D-Druck Betrachter`,
-            url: shareUrl
-          });
-        } catch (err) { console.error('Share dialog error:', err); }
-      }, 500);
+      if (Platform.OS === 'web') {
+        window.open(shareUrl, '_blank');
+      } else {
+        setTimeout(async () => {
+          try {
+            await Share.share({
+              message: Platform.OS === 'android' ? `STL 3D-Druck Betrachter: ${shareUrl}` : `STL 3D-Druck Betrachter`,
+              url: shareUrl
+            });
+          } catch (err) { console.error('Share dialog error:', err); }
+        }, 500);
+      }
       return;
     }
 
-    if (!apiKey) return;
-    setUploadingTaskId(`${taskId}-stl`);
-    setProcessingTask({ taskId, label: 'Konvertiere zu STL...', progress: 10 });
-    try {
-      const tripoData = await getTripoTaskStatus(apiKey, taskId);
-      const glbUrl = tripoData.output?.pbr_model || tripoData.output?.model_url || tripoData.output?.model;
-      if (!glbUrl) throw new Error('GLB URL not found');
+    let webWindow: Window | null = null;
+    if (Platform.OS === 'web') {
+      webWindow = window.open('about:blank', '_blank');
+      if (webWindow) {
+        webWindow.document.write('<html><body style="background:#121212;color:#ffffff;display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;margin:0;"><h3>Erstelle STL-3D-Modell...</h3></body></html>');
+      }
+    }
 
-      setProcessingTask({ taskId, label: 'Konvertiere zu STL...', progress: 40 });
+    setUploadingTaskId(`${taskId}-stl`);
+    setProcessingTask({ taskId, label: 'Lade Modell für STL...', progress: 10 });
+    try {
+      let glbUrl = item?.modelUrls?.glb;
+      if (!glbUrl && apiKey) {
+        const tripoData = await getTripoTaskStatus(apiKey, taskId);
+        glbUrl = tripoData.output?.pbr_model || tripoData.output?.model_url || tripoData.output?.model;
+      }
+
+      if (!glbUrl) {
+        throw new Error('GLB URL nicht gefunden');
+      }
+
+      setProcessingTask({ taskId, label: 'Konvertiere zu STL (3D-Druck)...', progress: 40 });
       const stlBytes = await convertGLBToSTLBytes(glbUrl, targetHeightMeters ?? item?.modelHeightMeters);
 
-      setProcessingTask({ taskId, label: 'Lade STL hoch...', progress: 70 });
-      const rawUrl = await uploadBytesToLitterbox(stlBytes, 'model.stl', 'model/stl');
+      setProcessingTask({ taskId, label: 'Lade STL hoch...', progress: 75 });
+      const rawStlUrl = await uploadBytesToLitterbox(stlBytes, 'model.stl', 'model/stl');
 
-      const viewerUrl = `https://skaterdenni-coder.github.io/ModellBetrachter/?model=${encodeURIComponent(rawUrl.trim())}`;
+      const viewerUrl = `https://skaterdenni-coder.github.io/ModellBetrachter/?model=${encodeURIComponent(rawStlUrl.trim())}`;
       updateEntry(taskId, { stlDownloadUrl: viewerUrl, stlDownloadUrlGeneratedAt: new Date().toISOString() });
 
-      setProcessingTask({ taskId, label: 'Öffne Teilen...', progress: 100 });
+      setProcessingTask({ taskId, label: 'Öffne Betrachter...', progress: 100 });
       const shareUrl = viewerUrl;
 
-      setTimeout(async () => {
-        try {
-          await Share.share({
-            message: Platform.OS === 'android' ? `STL 3D-Druck Betrachter: ${shareUrl}` : `STL 3D-Druck Betrachter`,
-            url: shareUrl,
-          });
-        } catch (err) { console.error('Share dialog error:', err); }
-        finally { setUploadingTaskId(null); setProcessingTask(null); }
-      }, 500);
-    } catch (error) {
-      console.error('STL viewer sharing error:', error);
-      Alert.alert(t.error, 'Failed to prepare STL viewer link.');
+      if (Platform.OS === 'web') {
+        if (webWindow) {
+          webWindow.location.href = shareUrl;
+        } else {
+          window.open(shareUrl, '_blank');
+        }
+        setUploadingTaskId(null);
+        setProcessingTask(null);
+      } else {
+        setTimeout(async () => {
+          try {
+            await Share.share({
+              message: Platform.OS === 'android' ? `STL 3D-Druck Betrachter: ${shareUrl}` : `STL 3D-Druck Betrachter`,
+              url: shareUrl,
+            });
+          } catch (err) { console.error('Share dialog error:', err); }
+          finally { setUploadingTaskId(null); setProcessingTask(null); }
+        }, 500);
+      }
+    } catch (error: any) {
+      if (webWindow) webWindow.close();
+      console.error('STL API export error:', error);
+      Alert.alert(t.error, error?.message || 'Fehler beim Erstellen des STL-Betrachters.');
       setUploadingTaskId(null);
       setProcessingTask(null);
     }
-  }, [apiKey, t, entries, language, updateEntry]);
+  }, [apiKey, t, entries, updateEntry]);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, targetHeightMeters?: number) => {
     const item = entries.find(e => e.taskId === taskId);
