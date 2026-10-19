@@ -1,4 +1,5 @@
 import { WebIO } from '@gltf-transform/core';
+import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { getBounds } from '@gltf-transform/functions';
 import { proxyUrl } from './tripo';
 
@@ -7,12 +8,21 @@ import { proxyUrl } from './tripo';
  */
 export async function resizeGLBToBytes(url: string, targetHeight: number): Promise<Uint8Array> {
   try {
-    const io = new WebIO();
-    const sourceUrl = proxyUrl(url);
-    const response = await fetch(sourceUrl);
-    if (!response.ok) throw new Error('Download fehlgeschlagen');
+    const io = new WebIO().registerExtensions(ALL_EXTENSIONS);
+    let arrayBuffer: ArrayBuffer;
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        arrayBuffer = await response.arrayBuffer();
+      } else {
+        throw new Error('Direct fetch failed');
+      }
+    } catch (e) {
+      const proxyResponse = await fetch(proxyUrl(url));
+      if (!proxyResponse.ok) throw new Error('Download failed');
+      arrayBuffer = await proxyResponse.arrayBuffer();
+    }
 
-    const arrayBuffer = await response.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
 
     const document = await io.readBinary(uint8Array);

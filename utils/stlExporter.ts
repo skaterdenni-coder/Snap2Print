@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { File as ExpoFile, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { WebIO } from '@gltf-transform/core';
+import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { resizeGLBToBytes } from './modelResizer';
 import { proxyUrl } from './tripo';
 
@@ -15,13 +16,23 @@ export async function convertGLBToSTLBytes(
   const glbBytes = targetHeightMeters
     ? await resizeGLBToBytes(glbUrl, targetHeightMeters)
     : await (async () => {
-        const sourceUrl = proxyUrl(glbUrl);
-        const res = await fetch(sourceUrl);
-        if (!res.ok) throw new Error('Download failed');
-        return new Uint8Array(await res.arrayBuffer());
+        let arrayBuffer: ArrayBuffer;
+        try {
+          const res = await fetch(glbUrl);
+          if (res.ok) {
+            arrayBuffer = await res.arrayBuffer();
+          } else {
+            throw new Error('Direct fetch failed');
+          }
+        } catch (e) {
+          const proxyRes = await fetch(proxyUrl(glbUrl));
+          if (!proxyRes.ok) throw new Error('Download failed');
+          arrayBuffer = await proxyRes.arrayBuffer();
+        }
+        return new Uint8Array(arrayBuffer);
       })();
 
-  const io = new WebIO();
+  const io = new WebIO().registerExtensions(ALL_EXTENSIONS);
   const document = await io.readBinary(glbBytes);
 
   const triangles: { v1: [number, number, number]; v2: [number, number, number]; v3: [number, number, number] }[] = [];
