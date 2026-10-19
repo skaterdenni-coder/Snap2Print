@@ -215,48 +215,50 @@ export default function HistoryScreen() {
     }
   }, [apiKey, createLocalGlbFileAsync, t]);
 
-  const downloadSTL = useCallback(async (taskId: string) => {
+  const downloadConvertedModel = useCallback(async (taskId: string, format: 'STL' | '3MF') => {
     if (!apiKey) {
       Alert.alert(t.error, 'No API Key found');
       return;
     }
 
-    setProcessingTask({ taskId, label: 'Starte STL-Export bei Tripo...', progress: 10 });
+    const formatName = format === 'STL' ? 'STL' : '3MF';
+    setProcessingTask({ taskId, label: `Starte ${formatName}-Export bei Tripo...`, progress: 10 });
     try {
-      setProcessingTask({ taskId, label: 'Erstelle STL-Konvertierung...', progress: 30 });
-      const convertTaskId = await createTripoConvertTask(apiKey, taskId, 'STL');
+      setProcessingTask({ taskId, label: `Erstelle ${formatName}-Konvertierung...`, progress: 30 });
+      const convertTaskId = await createTripoConvertTask(apiKey, taskId, format);
 
-      setProcessingTask({ taskId, label: 'Warte auf STL-Generierung...', progress: 50 });
-      let stlUrl: string | null = null;
+      setProcessingTask({ taskId, label: `Warte auf ${formatName}-Generierung...`, progress: 50 });
+      let fileUrl: string | null = null;
       let attempts = 0;
       while (attempts < 30) {
         await new Promise(r => setTimeout(r, 3000));
         attempts++;
         const statusData = await getTripoTaskStatus(apiKey, convertTaskId);
         if (statusData.status === 'success') {
-          stlUrl = statusData.output?.model || statusData.output?.model_url || statusData.output?.url;
+          fileUrl = statusData.output?.model || statusData.output?.model_url || statusData.output?.url;
           break;
         } else if (statusData.status === 'failed' || statusData.status === 'expired') {
-          throw new Error('STL conversion failed on Tripo server');
+          throw new Error(`${formatName} conversion failed on Tripo server`);
         }
         const prog = Math.min(90, 50 + attempts * 2);
-        setProcessingTask({ taskId, label: `Generiere STL (${prog}%)...`, progress: prog });
+        setProcessingTask({ taskId, label: `Generiere ${formatName} (${prog}%)...`, progress: prog });
       }
 
-      if (!stlUrl) {
-        throw new Error('STL download URL not found');
+      if (!fileUrl) {
+        throw new Error(`${formatName} download URL not found`);
       }
 
-      setProcessingTask({ taskId, label: 'Lade STL herunter...', progress: 95 });
+      setProcessingTask({ taskId, label: `Lade ${formatName} herunter...`, progress: 95 });
 
+      const ext = format.toLowerCase();
       if (Platform.OS === 'web') {
-        const res = await fetch(proxyUrl(stlUrl));
+        const res = await fetch(proxyUrl(fileUrl));
         const blob = await res.blob();
-        const filename = `model-${taskId}.stl`;
-        const file = new File([blob], filename, { type: 'model/stl' });
+        const filename = `model-${taskId}.${ext}`;
+        const file = new File([blob], filename, { type: format === 'STL' ? 'model/stl' : 'model/3mf' });
 
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: '3D Model STL', text: 'STL 3D Print Model' });
+          await navigator.share({ files: [file], title: `3D Model ${formatName}`, text: `${formatName} 3D Model` });
         } else {
           const blobUrl = window.URL.createObjectURL(blob);
           const link = document.createElement('a');
@@ -268,21 +270,21 @@ export default function HistoryScreen() {
           window.URL.revokeObjectURL(blobUrl);
         }
       } else {
-        const file = new ExpoFile(Paths.cache, `model-${taskId}.stl`);
-        await ExpoFile.downloadFileAsync(stlUrl, file, { idempotent: true });
+        const file = new ExpoFile(Paths.cache, `model-${taskId}.${ext}`);
+        await ExpoFile.downloadFileAsync(fileUrl, file, { idempotent: true });
         const sharingAvailable = await Sharing.isAvailableAsync();
         if (!sharingAvailable) {
           throw new Error('Sharing is not available on this device');
         }
         await Sharing.shareAsync(file.uri, {
-          mimeType: 'model/stl',
-          UTI: 'public.iso-standard-iso-10303-21',
-          dialogTitle: 'STL-Modell exportieren',
+          mimeType: format === 'STL' ? 'model/stl' : 'model/3mf',
+          UTI: format === 'STL' ? 'public.iso-standard-iso-10303-21' : 'org.3mf.3mf-model',
+          dialogTitle: `${formatName}-Modell exportieren`,
         });
       }
     } catch (error) {
-      console.error('STL Export error:', error);
-      Alert.alert(t.error, 'STL Export via Tripo failed.');
+      console.error(`${format} Export error:`, error);
+      Alert.alert(t.error, `${format} Export via Tripo failed.`);
     } finally {
       setProcessingTask(null);
     }
@@ -526,7 +528,7 @@ export default function HistoryScreen() {
               )}
               <Box size={14} color={isRainbow ? '#FF6B6B' : colors.accent} />
               <Text style={[styles.exportDropdownButtonText, { color: isRainbow ? '#FF6B6B' : colors.accent }]}>
-                Exportieren & Formate (STL, GLB, AR)
+                Exportieren & Formate (STL, 3MF, GLB, AR)
               </Text>
               <ChevronDown
                 size={14}
@@ -541,11 +543,22 @@ export default function HistoryScreen() {
                   style={styles.dropdownItem}
                   onPress={() => {
                     setActiveDropdownTaskId(null);
-                    downloadSTL(item.taskId);
+                    downloadConvertedModel(item.taskId, 'STL');
                   }}
                 >
                   <Box size={14} color="#FF9F43" />
-                  <Text style={[styles.dropdownItemText, { color: colors.text }]}> STL (3D-Druck Export)</Text>
+                  <Text style={[styles.dropdownItemText, { color: colors.text }]}>🖨️ STL (3D-Druck Export)</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    setActiveDropdownTaskId(null);
+                    downloadConvertedModel(item.taskId, '3MF');
+                  }}
+                >
+                  <Box size={14} color="#48DBFB" />
+                  <Text style={[styles.dropdownItemText, { color: colors.text }]}>🧊 3MF (Moderner 3D-Druck)</Text>
                 </TouchableOpacity>
 
                 {item.modelUrls.glb && (
