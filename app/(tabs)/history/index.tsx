@@ -21,7 +21,7 @@ import * as KeepAwake from 'expo-keep-awake';
 import { File as ExpoFile, Paths } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { Box, ExternalLink, Trash2, XCircle, Clock, Share2, AlertTriangle, Edit2 } from 'lucide-react-native';
+import { Box, ExternalLink, Trash2, XCircle, Clock, Share2, AlertTriangle, Edit2, ChevronDown } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -29,6 +29,7 @@ import { useHistory, HistoryEntry } from '@/contexts/HistoryContext';
 import { getTripoTaskStatus } from '@/utils/tripo';
 import { uploadToLitterbox } from '@/utils/FileSharing';
 import { resizeGLB, resizeGLBToBytes } from '@/utils/modelResizer';
+import { exportSTL } from '@/utils/stlExporter';
 import { rainbowGradient } from '@/constants/colors';
 
 type ProcessingTask = {
@@ -48,6 +49,7 @@ export default function HistoryScreen() {
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [renameTaskId, setRenameTaskId] = useState<string | null>(null);
+  const [activeDropdownTaskId, setActiveDropdownTaskId] = useState<string | null>(null);
   const isRainbow = mode === 'rainbow';
 
   // Bildschirm aktiv halten während Uploads/Verarbeitung
@@ -429,64 +431,107 @@ export default function HistoryScreen() {
 
         {item.modelUrls && (
           <View style={styles.downloadRow}>
-            {Object.entries(item.modelUrls).map(([format, url]) =>
-              url ? (
+            <TouchableOpacity
+              style={[
+                styles.exportDropdownButton,
+                {
+                  backgroundColor: isRainbow ? undefined : colors.accent + '15',
+                  borderColor: isRainbow ? 'transparent' : colors.accent + '30',
+                  overflow: 'hidden',
+                },
+              ]}
+              onPress={() => setActiveDropdownTaskId(activeDropdownTaskId === item.taskId ? null : item.taskId)}
+              activeOpacity={0.7}
+            >
+              {isRainbow && (
+                <LinearGradient
+                  colors={rainbowGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[StyleSheet.absoluteFill, { opacity: 0.15 }]}
+                />
+              )}
+              <Box size={14} color={isRainbow ? '#FF6B6B' : colors.accent} />
+              <Text style={[styles.exportDropdownButtonText, { color: isRainbow ? '#FF6B6B' : colors.accent }]}>
+                Exportieren & Formate (STL, GLB, AR)
+              </Text>
+              <ChevronDown
+                size={14}
+                color={isRainbow ? '#FF6B6B' : colors.accent}
+                style={{ transform: [{ rotate: activeDropdownTaskId === item.taskId ? '180deg' : '0deg' }] }}
+              />
+            </TouchableOpacity>
+
+            {activeDropdownTaskId === item.taskId && (
+              <View style={[styles.dropdownMenu, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
                 <TouchableOpacity
-                  key={format}
-                  style={[
-                    styles.downloadChip,
-                    {
-                      backgroundColor: isRainbow ? undefined : colors.accent + '12',
-                      borderColor: isRainbow ? 'transparent' : colors.accent + '30',
-                      overflow: 'hidden',
-                    },
-                  ]}
-                  onPress={() => format === 'glb' ? shareToDownload(item.taskId, item.modelHeightMeters) : downloadFile(item.taskId, format, item.modelHeightMeters)}
-                  disabled={currentProcessing !== null || uploadingTaskId === `${item.taskId}-${format}`}
-                  activeOpacity={0.7}
+                  style={styles.dropdownItem}
+                  onPress={async () => {
+                    setActiveDropdownTaskId(null);
+                    if (!item.modelUrls?.glb) return;
+                    setProcessingTask({ taskId: item.taskId, label: 'Exportiere STL...', progress: 10 });
+                    try {
+                      await exportSTL(
+                        item.modelUrls.glb,
+                        item.modelHeightMeters,
+                        `model-${item.taskId}.stl`,
+                        (label, progress) => {
+                          setProcessingTask({ taskId: item.taskId, label, progress });
+                        }
+                      );
+                    } catch (e) {
+                      Alert.alert(t.error, 'STL Export failed');
+                    } finally {
+                      setProcessingTask(null);
+                    }
+                  }}
                 >
-                  {isRainbow && (
-                    <LinearGradient
-                      colors={rainbowGradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={[StyleSheet.absoluteFill, { opacity: 0.15 }]}
-                    />
-                  )}
-                  {uploadingTaskId === `${item.taskId}-${format}` ? (
-                    <ActivityIndicator size="small" color={isRainbow ? '#FF6B6B' : colors.accent} />
-                  ) : (
-                    <>
-                      {format === 'glb' ? <Share2 size={12} color={isRainbow ? '#FF6B6B' : colors.accent} /> : <ExternalLink size={12} color={isRainbow ? '#FF6B6B' : colors.accent} />}
-                      <Text style={[styles.chipText, { color: isRainbow ? '#FF6B6B' : colors.accent }]}>
-                        {format.toUpperCase()}
-                      </Text>
-                    </>
-                  )}
+                  <Box size={14} color="#FF9F43" />
+                  <Text style={[styles.dropdownItemText, { color: colors.text }]}>STL (3D-Druck Export)</Text>
                 </TouchableOpacity>
-              ) : null,
-            )}
-            {item.modelUrls.glb && (
-              <TouchableOpacity
-                style={[
-                  styles.shareChip,
-                  {
-                    backgroundColor: colors.success + '12',
-                    borderColor: colors.success + '30',
-                  },
-                ]}
-                onPress={() => shareToLitterboxAndAR(item.taskId, item.modelHeightMeters)}
-                disabled={uploadingTaskId === `${item.taskId}-ar` || currentProcessing !== null}
-              >
-                {uploadingTaskId === `${item.taskId}-ar` ? (
-                  <ActivityIndicator size="small" color={colors.success} />
-                ) : (
-                  <>
-                    <Share2 size={12} color={colors.success} />
-                    <Text style={[styles.shareChipText, { color: colors.success }]}>{t.arShare}</Text>
-                  </>
+
+                {item.modelUrls.glb && (
+                  <TouchableOpacity
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setActiveDropdownTaskId(null);
+                      shareToDownload(item.taskId, item.modelHeightMeters);
+                    }}
+                  >
+                    <ExternalLink size={14} color={colors.accent} />
+                    <Text style={[styles.dropdownItemText, { color: colors.text }]}> GLB (Download / Teilen)</Text>
+                  </TouchableOpacity>
                 )}
-              </TouchableOpacity>
+
+                {item.modelUrls.glb && (
+                  <TouchableOpacity
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setActiveDropdownTaskId(null);
+                      shareToLitterboxAndAR(item.taskId, item.modelHeightMeters);
+                    }}
+                  >
+                    <Share2 size={14} color={colors.success} />
+                    <Text style={[styles.dropdownItemText, { color: colors.text }]}> {t.arShare}</Text>
+                  </TouchableOpacity>
+                )}
+
+                {Object.entries(item.modelUrls).map(([format, url]) =>
+                  format !== 'glb' && url ? (
+                    <TouchableOpacity
+                      key={format}
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setActiveDropdownTaskId(null);
+                        downloadFile(item.taskId, format, item.modelHeightMeters);
+                      }}
+                    >
+                      <ExternalLink size={14} color={colors.textSecondary} />
+                      <Text style={[styles.dropdownItemText, { color: colors.text }]}>{format.toUpperCase()}</Text>
+                    </TouchableOpacity>
+                  ) : null
+                )}
+              </View>
             )}
           </View>
         )}
@@ -508,7 +553,7 @@ export default function HistoryScreen() {
         )}
       </View>
     );
-  }, [colors, isRainbow, entries.length, handleRemove, downloadFile, processingTask, uploadingTaskId, shareToLitterboxAndAR, shareToDownload, t, language, openRenameModal]);
+  }, [colors, isRainbow, entries.length, handleRemove, downloadFile, processingTask, uploadingTaskId, shareToLitterboxAndAR, shareToDownload, t, language, openRenameModal, activeDropdownTaskId]);
 
   const renderEmpty = useCallback(() => (
     <View style={styles.emptyContainer}>
@@ -641,6 +686,41 @@ const styles = StyleSheet.create({
   emptyIconCircle: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   emptyTitle: { fontSize: 20, fontWeight: '700' },
   emptySubtitle: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
+  exportDropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  exportDropdownButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    flex: 1,
+  },
+  dropdownMenu: {
+    width: '100%',
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 8,
+    overflow: 'hidden',
+    paddingVertical: 4,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

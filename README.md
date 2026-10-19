@@ -2,7 +2,7 @@
 
 **Snap2XR** transforms 2D photos into high-quality 3D models using AI and makes them instantly accessible for Augmented Reality (AR).
 
-🌐 **Live Web Version:** [https://skaterdenni-coder.github.io/Realisierung-BA/](https://skaterdenni-coder.github.io/Realisierung-BA/)
+🌐 **Live Web Version:** [https://skaterdenni-coder.github.io/Snap2Print/](https://skaterdenni-coder.github.io/Snap2Print/)
 
 [Deutschsprachige Version unten](#de-snap2xr-2d-zu-3d-anwendung)
 
@@ -30,7 +30,7 @@
 
 ### Live Web App
 Access the deployed web version directly here:  
-👉 [https://skaterdenni-coder.github.io/Realisierung-BA/](https://skaterdenni-coder.github.io/Realisierung-BA/)
+👉 [https://skaterdenni-coder.github.io/Snap2Print/](https://skaterdenni-coder.github.io/Snap2Print/)
 
 *(Note: Don't forget to enter your Tripo API key in the app settings)*
 
@@ -45,7 +45,7 @@ Access the deployed web version directly here:
 
 **Snap2XR** verwandelt 2D-Fotos mithilfe von KI in hochwertige 3D-Modelle, die sofort in Augmented Reality (AR) erlebt werden können.
 
-🌐 **Live Web-Version:** [https://skaterdenni-coder.github.io/Realisierung-BA/](https://skaterdenni-coder.github.io/Realisierung-BA/)
+🌐 **Live Web-Version:** [https://skaterdenni-coder.github.io/Snap2Print/](https://skaterdenni-coder.github.io/Snap2Print/)
 
 ## ✨ Hauptmerkmale
 
@@ -64,13 +64,13 @@ Access the deployed web version directly here:
 
 ### Live Web-App
 Direkt im Browser öffnen:  
-👉 [https://skaterdenni-coder.github.io/Realisierung-BA/](https://skaterdenni-coder.github.io/Realisierung-BA/)
+👉 [https://skaterdenni-coder.github.io/Snap2Print/](https://skaterdenni-coder.github.io/Snap2Print/)
 
 *(Hinweis: Den Tripo API-Key einfach in den App-Einstellungen hinterlegen)*
 
 ### Lokales Setup
 1. `bun install` oder `npm install`
-2. `npx expo start` (oder `npx expo start --web` für die lokale Web-Vorschau)
+2. `npx expo start` (or `npx expo start --web` für die lokale Web-Vorschau)
 3. Tripo API-Key in den Einstellungen hinterlegen.
 
 ---

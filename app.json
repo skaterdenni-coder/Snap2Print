@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Snap2XR Real",
-    "slug": "snap2xr-Real",
+    "name": "Snap2Print ",
+    "slug": "snap2print",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -28,14 +28,14 @@
       "favicon": "./assets/images/favicon.png",
       "bundler": "metro",
       "output": "static",
-      "homepage": "https://skaterdenni-coder.github.io/Realisierung-BA/",
-      "baseUrl": "/Realisierung-BA"
+      "homepage": "https://skaterdenni-coder.github.io/Snap2Print/",
+      "baseUrl": "/Snap2Print"
     },
     "plugins": [
       [
         "expo-router",
         {
-          "origin": "https://skaterdenni-coder.github.io/Realisierung-BA/"
+          "origin": "https://skaterdenni-coder.github.io/Snap2Print/"
         }
       ],
       "expo-font",
@@ -45,7 +45,7 @@
     ],
     "experiments": {
       "typedRoutes": true,
-      "baseUrl": "/Realisierung-BA"
+      "baseUrl": "/Snap2Print"
     }
   }
 }

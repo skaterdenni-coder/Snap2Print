@@ -28,6 +28,7 @@ import { rainbowGradient } from '@/constants/colors';
 import { useHistory } from '@/contexts/HistoryContext';
 import { uploadToLitterbox } from '@/utils/FileSharing';
 import { resizeGLB, resizeGLBToBytes } from '@/utils/modelResizer';
+import { exportSTL } from '@/utils/stlExporter';
 
 interface SelectedImage {
   uri: string;
@@ -463,8 +464,8 @@ export default function HomeScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView style={styles.scrollView} contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 100 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={[styles.title, { color: colors.text }]}>Snap2XR</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Powered by Tripo AI V3.1</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Snap2Print</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Based on Snap2XR V0.8</Text>
         </View>
 
         <View style={styles.section}>
@@ -596,6 +597,37 @@ export default function HomeScreen() {
                             <>
                               <Share2 size={12} color={colors.accent} />
                               <Text style={[styles.shareChipText, { color: colors.accent }]}>GLB</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      )}
+
+                      {task.modelUrls.glb && (
+                        <TouchableOpacity
+                          style={[styles.shareChip, { backgroundColor: '#FF9F4315', borderColor: '#FF9F4330' }]}
+                          onPress={async () => {
+                            if (!task.modelUrls?.glb) return;
+                            setUploadingTaskId(`${task.id}-stl`);
+                            try {
+                              await exportSTL(
+                                task.modelUrls.glb,
+                                task.modelHeightMeters,
+                                `model-${task.taskId}.stl`
+                              );
+                            } catch (e) {
+                              Alert.alert(t.error, 'STL Export failed');
+                            } finally {
+                              setUploadingTaskId(null);
+                            }
+                          }}
+                          disabled={uploadingTaskId === `${task.id}-stl`}
+                        >
+                          {uploadingTaskId === `${task.id}-stl` ? (
+                            <ActivityIndicator size="small" color="#FF9F43" />
+                          ) : (
+                            <>
+                              <Box size={12} color="#FF9F43" />
+                              <Text style={[styles.shareChipText, { color: '#FF9F43' }]}>STL</Text>
                             </>
                           )}
                         </TouchableOpacity>
