@@ -541,13 +541,29 @@ export default function HistoryScreen() {
               <View style={[styles.dropdownMenu, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
                 <TouchableOpacity
                   style={styles.dropdownItem}
-                  onPress={() => {
+                  onPress={async () => {
                     setActiveDropdownTaskId(null);
-                    downloadConvertedModel(item.taskId, 'STL');
+                    if (!item.modelUrls?.glb) return;
+                    setProcessingTask({ taskId: item.taskId, label: 'Exportiere STL...', progress: 10 });
+                    try {
+                      await exportSTL(
+                        item.modelUrls.glb,
+                        item.modelHeightMeters,
+                        `model-${item.taskId}.stl`,
+                        (label, progress) => {
+                          setProcessingTask({ taskId: item.taskId, label, progress });
+                        }
+                      );
+                    } catch (e) {
+                      console.error('STL Export error:', e);
+                      Alert.alert(t.error, 'STL Export failed');
+                    } finally {
+                      setProcessingTask(null);
+                    }
                   }}
                 >
                   <Box size={14} color="#FF9F43" />
-                  <Text style={[styles.dropdownItemText, { color: colors.text }]}>🖨️ STL (3D-Druck Export)</Text>
+                  <Text style={[styles.dropdownItemText, { color: colors.text }]}>🖨️ STL (Sofort-Export)</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
