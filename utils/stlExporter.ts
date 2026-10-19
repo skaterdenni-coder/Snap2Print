@@ -3,6 +3,7 @@ import { File as ExpoFile, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { WebIO } from '@gltf-transform/core';
 import { resizeGLBToBytes } from './modelResizer';
+import { proxyUrl } from './tripo';
 
 /**
  * Konvertiert ein GLB-Modell (optional skaliert auf Zielhöhe) in Binär-STL-Bytes.
@@ -14,7 +15,8 @@ export async function convertGLBToSTLBytes(
   const glbBytes = targetHeightMeters
     ? await resizeGLBToBytes(glbUrl, targetHeightMeters)
     : await (async () => {
-        const res = await fetch(glbUrl);
+        const sourceUrl = proxyUrl(glbUrl);
+        const res = await fetch(sourceUrl);
         if (!res.ok) throw new Error('Download failed');
         return new Uint8Array(await res.arrayBuffer());
       })();

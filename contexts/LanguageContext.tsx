@@ -68,10 +68,10 @@ const translations = {
     languageDesc: 'Wähle die App-Sprache',
     help: 'Hilfe',
     aboutApp: 'Über diese App',
-    aboutAppDesc: 'Hintergrund und Ziel dieser Bachelorarbeit',
-    baInfoTitle: 'Snap2XR – Bachelorarbeit Projekt 2026',
-    baInfoText: 'Diese App wurde von Dennis Werner im Rahmen einer Bachelorarbeit an der Hochschule Esslingen (Studiengang Fahrzeugtechnik) entwickelt.\n\nDas Ziel des Projekts war die Realisierung einer nutzerzentrierten Lösung, um die Hürden bei der Erstellung von 3D-Modellen für Augmented Reality (AR) zu senken. Durch den Einsatz moderner KI-Schnittstellen ermöglicht Snap2XR das Erzeugen hochwertiger 3D-Assets aus einfachen Fotos, um diese ohne Expertenwissen direkt im Raum erlebbar zu machen.',
-    close: 'Schließen',
+    aboutAppDesc: 'Hintergrund und Ziel dieser Anwendung',
+    baInfoTitle: 'Snap2Print ',
+    baInfoText: 'Diese App wurde von Dennis Werner entwickelt. Sie ist eine speziell für den 3D-Druck optimierte Erweiterung der Anwendung Snap2XR.\n\nDas Ziel des Projekts ist eine nutzerzentrierte Lösung, um die Hürden bei der Erstellung von 3D-Modellen zu senken. Durch den Einsatz moderner KI-Schnittstellen ermöglicht Snap2Print das Erzeugen hochwertiger 3D-Assets aus einfachen Fotos, um diese ohne Expertenwissen direkt für den 3D-Druck vorzubereiten.',
+                close: 'Schließen',
   },
   en: {
     // Tabs
@@ -134,10 +134,10 @@ const translations = {
     languageDesc: 'Select app language',
     help: 'Help',
     aboutApp: 'About this App',
-    aboutAppDesc: 'Background and goal of this Bachelor\'s thesis',
-    baInfoTitle: 'Snap2XR – Bachelor\'s Thesis Project 2026',
-    baInfoText: 'This app was developed by Dennis Werner0 as part of a Bachelor\'s thesis at Esslingen University of Applied Sciences (Automotive Engineering program).\n\nThe goal of the project was to implement a user-centered solution to lower the barriers to creating 3D models for Augmented Reality (AR). By using modern AI interfaces, Snap2XR enables the generation of high-quality 3D assets from simple photos, making them directly experienceable in space without expert knowledge.',
-    close: 'Close',
+    aboutAppDesc: 'Background and goal of this project ',
+    baInfoTitle: 'Snap2Print ',
+    baInfoText: 'This app was developed by Dennis Werner. It is an extension of the Snap2XR application specifically optimized for 3D printing.\n\nThe goal of the project is to provide a user-centered solution that lowers the barriers to creating 3D models. By leveraging modern AI interfaces, Snap2Print enables the generation of high-quality 3D assets from simple photos, preparing them directly for 3D printing without requiring expert knowledge.',
+                close: 'Close',
   }
 };
 

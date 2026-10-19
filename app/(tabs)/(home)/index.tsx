@@ -465,7 +465,7 @@ export default function HomeScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 100 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Text style={[styles.title, { color: colors.text }]}>Snap2Print</Text>
-          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Based on Snap2XR V0.8</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Based on Snap2Print V1.0</Text>
         </View>
 
         <View style={styles.section}>

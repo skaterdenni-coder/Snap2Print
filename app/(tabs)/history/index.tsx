@@ -26,8 +26,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useHistory, HistoryEntry } from '@/contexts/HistoryContext';
-import { getTripoTaskStatus } from '@/utils/tripo';
-import { uploadToLitterbox } from '@/utils/FileSharing';
+import { getTripoTaskStatus, createTripoConvertTask } from '@/utils/tripo';
+import { uploadToLitterbox, proxyUrl } from '@/utils/FileSharing';
 import { resizeGLB, resizeGLBToBytes } from '@/utils/modelResizer';
 import { exportSTL } from '@/utils/stlExporter';
 import { rainbowGradient } from '@/constants/colors';
@@ -214,6 +214,79 @@ export default function HistoryScreen() {
       setProcessingTask(null);
     }
   }, [apiKey, createLocalGlbFileAsync, t]);
+
+  const downloadSTL = useCallback(async (taskId: string) => {
+    if (!apiKey) {
+      Alert.alert(t.error, 'No API Key found');
+      return;
+    }
+
+    setProcessingTask({ taskId, label: 'Starte STL-Export bei Tripo...', progress: 10 });
+    try {
+      setProcessingTask({ taskId, label: 'Erstelle STL-Konvertierung...', progress: 30 });
+      const convertTaskId = await createTripoConvertTask(apiKey, taskId, 'STL');
+
+      setProcessingTask({ taskId, label: 'Warte auf STL-Generierung...', progress: 50 });
+      let stlUrl: string | null = null;
+      let attempts = 0;
+      while (attempts < 30) {
+        await new Promise(r => setTimeout(r, 3000));
+        attempts++;
+        const statusData = await getTripoTaskStatus(apiKey, convertTaskId);
+        if (statusData.status === 'success') {
+          stlUrl = statusData.output?.model || statusData.output?.model_url || statusData.output?.url;
+          break;
+        } else if (statusData.status === 'failed' || statusData.status === 'expired') {
+          throw new Error('STL conversion failed on Tripo server');
+        }
+        const prog = Math.min(90, 50 + attempts * 2);
+        setProcessingTask({ taskId, label: `Generiere STL (${prog}%)...`, progress: prog });
+      }
+
+      if (!stlUrl) {
+        throw new Error('STL download URL not found');
+      }
+
+      setProcessingTask({ taskId, label: 'Lade STL herunter...', progress: 95 });
+
+      if (Platform.OS === 'web') {
+        const res = await fetch(proxyUrl(stlUrl));
+        const blob = await res.blob();
+        const filename = `model-${taskId}.stl`;
+        const file = new File([blob], filename, { type: 'model/stl' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: '3D Model STL', text: 'STL 3D Print Model' });
+        } else {
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+        }
+      } else {
+        const file = new ExpoFile(Paths.cache, `model-${taskId}.stl`);
+        await ExpoFile.downloadFileAsync(stlUrl, file, { idempotent: true });
+        const sharingAvailable = await Sharing.isAvailableAsync();
+        if (!sharingAvailable) {
+          throw new Error('Sharing is not available on this device');
+        }
+        await Sharing.shareAsync(file.uri, {
+          mimeType: 'model/stl',
+          UTI: 'public.iso-standard-iso-10303-21',
+          dialogTitle: 'STL-Modell exportieren',
+        });
+      }
+    } catch (error) {
+      console.error('STL Export error:', error);
+      Alert.alert(t.error, 'STL Export via Tripo failed.');
+    } finally {
+      setProcessingTask(null);
+    }
+  }, [apiKey, t]);
 
   const shareToLitterboxAndAR = useCallback(async (taskId: string, targetHeightMeters?: number) => {
     const item = entries.find(e => e.taskId === taskId);
@@ -466,28 +539,13 @@ export default function HistoryScreen() {
               <View style={[styles.dropdownMenu, { backgroundColor: colors.card, borderColor: colors.cardBorder }]}>
                 <TouchableOpacity
                   style={styles.dropdownItem}
-                  onPress={async () => {
+                  onPress={() => {
                     setActiveDropdownTaskId(null);
-                    if (!item.modelUrls?.glb) return;
-                    setProcessingTask({ taskId: item.taskId, label: 'Exportiere STL...', progress: 10 });
-                    try {
-                      await exportSTL(
-                        item.modelUrls.glb,
-                        item.modelHeightMeters,
-                        `model-${item.taskId}.stl`,
-                        (label, progress) => {
-                          setProcessingTask({ taskId: item.taskId, label, progress });
-                        }
-                      );
-                    } catch (e) {
-                      Alert.alert(t.error, 'STL Export failed');
-                    } finally {
-                      setProcessingTask(null);
-                    }
+                    downloadSTL(item.taskId);
                   }}
                 >
                   <Box size={14} color="#FF9F43" />
-                  <Text style={[styles.dropdownItemText, { color: colors.text }]}>STL (3D-Druck Export)</Text>
+                  <Text style={[styles.dropdownItemText, { color: colors.text }]}> STL (3D-Druck Export)</Text>
                 </TouchableOpacity>
 
                 {item.modelUrls.glb && (

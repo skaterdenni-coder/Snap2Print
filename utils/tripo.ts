@@ -277,3 +277,32 @@ export async function imageUriToBase64DataUrl(uri: string): Promise<string> {
     reader.readAsDataURL(blob);
   });
 }
+
+/**
+ * Erstellt einen Konvertierungs-Task bei Tripo (z.B. nach STL, OBJ, FBX, USDZ, GLTF, 3MF).
+ */
+export async function createTripoConvertTask(
+  apiKey: string,
+  taskId: string,
+  format: 'STL' | 'OBJ' | 'FBX' | 'USDZ' | 'GLTF' | '3MF'
+): Promise<string> {
+  console.log(`[Tripo] Starte Konvertierungs-Task zu ${format} für Task ${taskId}`);
+
+  const body = {
+    input: taskId,
+    format: format,
+    pivot_to_center_bottom: true
+  };
+
+  const response = await fetch(getTripoUrl('/models/convert'), {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey.trim()}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await safeParseJson(response);
+  return data.data.task_id;
+}

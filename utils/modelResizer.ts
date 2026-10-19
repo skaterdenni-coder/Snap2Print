@@ -1,5 +1,6 @@
 import { WebIO } from '@gltf-transform/core';
 import { getBounds } from '@gltf-transform/functions';
+import { proxyUrl } from './tripo';
 
 /**
  * Lädt ein GLB, skaliert es auf die Zielhöhe (Y-Achse) und gibt es als Binärdaten zurück.
@@ -7,7 +8,8 @@ import { getBounds } from '@gltf-transform/functions';
 export async function resizeGLBToBytes(url: string, targetHeight: number): Promise<Uint8Array> {
   try {
     const io = new WebIO();
-    const response = await fetch(url);
+    const sourceUrl = proxyUrl(url);
+    const response = await fetch(sourceUrl);
     if (!response.ok) throw new Error('Download fehlgeschlagen');
 
     const arrayBuffer = await response.arrayBuffer();
