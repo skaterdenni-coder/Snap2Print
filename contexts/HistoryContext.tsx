@@ -21,6 +21,8 @@ export interface HistoryEntry {
   arUrlGeneratedAt?: string;
   glbDownloadUrl?: string;
   glbDownloadUrlGeneratedAt?: string;
+  stlDownloadUrl?: string;
+  stlDownloadUrlGeneratedAt?: string;
   modelHeightMeters?: number;
   createdAt: string;
   completedAt: string;

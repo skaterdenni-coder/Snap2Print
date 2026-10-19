@@ -26,9 +26,9 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { createTripoTask, getTripoTaskStatus, mapTripoStatus, createTripoRefineTask, imageUriToBase64DataUrl, TripoApiError } from '@/utils/tripo';
 import { rainbowGradient } from '@/constants/colors';
 import { useHistory } from '@/contexts/HistoryContext';
-import { uploadToLitterbox } from '@/utils/FileSharing';
+import { uploadToLitterbox, uploadBytesToLitterbox } from '@/utils/FileSharing';
 import { resizeGLB, resizeGLBToBytes } from '@/utils/modelResizer';
-import { exportSTL } from '@/utils/stlExporter';
+import { convertGLBToSTLBytes, exportSTL } from '@/utils/stlExporter';
 
 interface SelectedImage {
   uri: string;
@@ -450,6 +450,59 @@ export default function HomeScreen() {
     }
   }, [t, entries, uploadToLitterbox, updateEntry]);
 
+  const shareToSTLViewer = useCallback(async (taskId: string, glbUrl: string, targetHeightMeters?: number) => {
+    const existingEntry = entries.find(e => e.taskId === taskId);
+    const EXPIRATION_MS = 21 * 60 * 60 * 1000;
+
+    let isLinkValid = false;
+    if (existingEntry?.stlDownloadUrl && existingEntry.stlDownloadUrlGeneratedAt) {
+      const generatedAt = new Date(existingEntry.stlDownloadUrlGeneratedAt).getTime();
+      const now = new Date().getTime();
+      if (now - generatedAt < EXPIRATION_MS) {
+        isLinkValid = true;
+      }
+    }
+
+    if (isLinkValid && existingEntry?.stlDownloadUrl) {
+      const shareUrl = existingEntry.stlDownloadUrl;
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `STL 3D-Druck Betrachter: ${shareUrl}` : `STL 3D-Druck Betrachter`,
+            url: shareUrl
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+      }, 500);
+      return;
+    }
+
+    setUploadingTaskId(`${taskId}-stl`);
+    try {
+      const stlBytes = await convertGLBToSTLBytes(glbUrl, targetHeightMeters ?? existingEntry?.modelHeightMeters);
+      const rawUrl = await uploadBytesToLitterbox(stlBytes, 'model.stl', 'model/stl');
+      const viewerUrl = `https://skaterdenni-coder.github.io/ModellBetrachter/?model=${encodeURIComponent(rawUrl)}`;
+
+      updateEntry(taskId, {
+        stlDownloadUrl: viewerUrl,
+        stlDownloadUrlGeneratedAt: new Date().toISOString()
+      });
+
+      const shareUrl = viewerUrl;
+      setTimeout(async () => {
+        try {
+          await Share.share({
+            message: Platform.OS === 'android' ? `STL 3D-Druck Betrachter: ${shareUrl}` : `STL 3D-Druck Betrachter`,
+            url: shareUrl
+          });
+        } catch (err) { console.error('Share dialog error:', err); }
+        finally { setUploadingTaskId(null); }
+      }, 500);
+    } catch (e) {
+      Alert.alert(t.error, 'Failed to prepare STL viewer link');
+      setUploadingTaskId(null);
+    }
+  }, [t, entries, updateEntry]);
+
   const getRainbowColor = (index: number) => rainbowGradient[index % rainbowGradient.length];
 
   const getStatusLabel = (status: string) => {
@@ -605,21 +658,7 @@ export default function HomeScreen() {
                       {task.modelUrls.glb && (
                         <TouchableOpacity
                           style={[styles.shareChip, { backgroundColor: '#FF9F4315', borderColor: '#FF9F4330' }]}
-                          onPress={async () => {
-                            if (!task.modelUrls?.glb) return;
-                            setUploadingTaskId(`${task.id}-stl`);
-                            try {
-                              await exportSTL(
-                                task.modelUrls.glb,
-                                task.modelHeightMeters,
-                                `model-${task.taskId}.stl`
-                              );
-                            } catch (e) {
-                              Alert.alert(t.error, 'STL Export failed');
-                            } finally {
-                              setUploadingTaskId(null);
-                            }
-                          }}
+                          onPress={() => task.modelUrls?.glb && shareToSTLViewer(task.taskId, task.modelUrls.glb, task.modelHeightMeters)}
                           disabled={uploadingTaskId === `${task.id}-stl`}
                         >
                           {uploadingTaskId === `${task.id}-stl` ? (

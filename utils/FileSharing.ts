@@ -66,3 +66,46 @@ export async function uploadToLitterbox(
 
   return litterboxUrl;
 }
+
+/**
+ * Lädt rohe Binärdaten (z. B. konvertierte STL-Bytes) zu Litterbox hoch.
+ */
+export async function uploadBytesToLitterbox(
+  bytes: Uint8Array,
+  filename: string = 'model.stl',
+  mimeType: string = 'model/stl'
+): Promise<string> {
+  const formData = new FormData();
+  formData.append('reqtype', 'fileupload');
+  formData.append('time', '24h');
+
+  if (Platform.OS === 'web') {
+    formData.append('fileToUpload', new File([bytes.buffer as ArrayBuffer], filename, { type: mimeType }));
+  } else {
+    const file = new ExpoFile(Paths.cache, `upload-${Date.now()}-${filename}`);
+    file.write(bytes);
+
+    // @ts-ignore
+    formData.append('fileToUpload', {
+      uri: file.uri,
+      name: filename,
+      type: mimeType
+    });
+  }
+
+  const uploadRes = await fetch(proxyUrl('https://litterbox.catbox.moe/resources/internals/api.php'), {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!uploadRes.ok) {
+    throw new Error(`Upload failed with status ${uploadRes.status}`);
+  }
+
+  const litterboxUrl = (await uploadRes.text()).trim();
+  if (!litterboxUrl.startsWith('http')) {
+    throw new Error(`Upload failed: ${litterboxUrl}`);
+  }
+
+  return litterboxUrl;
+}
